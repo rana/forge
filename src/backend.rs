@@ -1,7 +1,8 @@
 use crate::knowledge::{Installer, ToolInstaller};
+use crate::platform::Platform;
 use anyhow::Result;
-use std::process::Command;
 use regex::Regex;
+use std::process::Command;
 
 pub struct InstallResult {
     pub version: String,
@@ -12,45 +13,48 @@ pub fn execute_install(
     tool_name: &str,
     tool_config: &ToolInstaller,
     version: Option<&str>,
+    platform: &Platform,
 ) -> Result<InstallResult> {
     let mut command = installer.install.clone();
     
     // Expand templates
     for part in &mut command {
-        *part = expand_template(part, tool_name, tool_config, version);
+        *part = expand_template(part, tool_name, tool_config, version, platform);
     }
-    
+
     println!("🔨 Running: {}", command.join(" "));
-    
-    let output = Command::new(&command[0])
-        .args(&command[1..])
-        .output()?;
-    
+
+    let output = Command::new(&command[0]).args(&command[1..]).output()?;
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("Command failed: {}", stderr);
     }
-    
+
     // Try to extract version from output
     let stdout = String::from_utf8_lossy(&output.stdout);
     let version = extract_version(&stdout).unwrap_or_else(|| "unknown".to_string());
-    
+
     Ok(InstallResult { version })
 }
 
-fn expand_template(
+pub fn expand_template(
     template: &str,
     tool_name: &str,
     config: &ToolInstaller,
     version: Option<&str>,
+    platform: &Platform,
 ) -> String {
-    template
+    let expanded = template
         .replace("{tool}", tool_name)
         .replace("{package}", config.package.as_deref().unwrap_or(tool_name))
         .replace("{repo}", config.repo.as_deref().unwrap_or(""))
         .replace("{pattern}", config.pattern.as_deref().unwrap_or("*"))
         .replace("{url}", config.url.as_deref().unwrap_or(""))
-        .replace("{version}", version.unwrap_or("latest"))
+        .replace("{version}", version.unwrap_or("latest"));
+    
+    // Platform expansion
+    platform.expand_pattern(&expanded)
 }
 
 fn extract_version(output: &str) -> Option<String> {
@@ -65,15 +69,13 @@ pub fn check_tool_version(tool_name: &str, command_template: &[String]) -> Resul
         .iter()
         .map(|part| part.replace("{tool}", tool_name))
         .collect();
-    
+
     if command.is_empty() {
         return Ok(None);
     }
-    
-    let output = Command::new(&command[0])
-        .args(&command[1..])
-        .output()?;
-    
+
+    let output = Command::new(&command[0]).args(&command[1..]).output()?;
+
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         Ok(extract_version(&stdout))

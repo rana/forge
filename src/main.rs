@@ -22,6 +22,18 @@ enum Commands {
         installer: Option<String>,
     },
     
+    /// Uninstall a tool
+    Uninstall {
+        /// Name of the tool
+        tool: String,
+    },
+    
+    /// Explain why a tool exists
+    Why {
+        /// Name of the tool
+        tool: String,
+    },
+    
     /// List installed tools
     List,
 }
@@ -34,6 +46,12 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Install { tool, installer } => {
             forge.install(&tool, installer.as_deref()).await?;
+        }
+        Commands::Uninstall { tool } => {
+            forge.uninstall(&tool).await?;
+        }
+        Commands::Why { tool } => {
+            forge.why(&tool)?;
         }
         Commands::List => {
             forge.list().await?;

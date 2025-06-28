@@ -1,24 +1,44 @@
-version = 2
+version = 1
 
-# Simple command-based installers
+# Platform configurations
+[platforms.linux]
+precedence = ["cargo", "github", "apt"]
+
+[platforms.macos]
+precedence = ["brew", "cargo", "github"]
+
+# Installers
 [installers.cargo]
 type = "command"
 check = ["cargo", "--version"]
 install = ["cargo", "install", "{package}", "--locked"]
+uninstall = ["cargo", "uninstall", "{package}"]
 
 [installers.github]
 type = "command"
 check = ["gh", "--version"]
 install = ["gh", "release", "download", "--repo", "{repo}", "--pattern", "{pattern}", "--skip-existing", "--dir", "~/.local/bin"]
 
-# Default version detection patterns
+[installers.brew]
+type = "command"
+check = ["brew", "--version"]
+install = ["brew", "install", "{package}"]
+uninstall = ["brew", "uninstall", "{package}"]
+
+[installers.apt]
+type = "command"
+check = ["apt", "--version"]
+install = ["sudo", "apt", "install", "-y", "{package}"]
+uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
+
+# Version detection
 [[version_detection.default]]
 command = ["{tool}", "--version"]
 pattern = "(?:version )?v?([0-9]+\\.[0-9]+\\.[0-9]+)"
 
 # Tools
 [tools.ripgrep]
-description = "Blazing fast search tool"
+description = "Blazing fast search tool that respects .gitignore"
 
 [tools.ripgrep.installers.cargo]
 package = "ripgrep"
@@ -26,3 +46,27 @@ package = "ripgrep"
 [tools.ripgrep.installers.github]
 repo = "BurntSushi/ripgrep"
 pattern = "ripgrep-{version}-{arch}-unknown-linux-musl.tar.gz"
+
+[tools.ripgrep.installers.brew]
+package = "ripgrep"
+
+[tools.fd]
+description = "User-friendly alternative to find"
+
+[tools.fd.installers.cargo]
+package = "fd-find"
+
+[tools.fd.installers.brew]
+package = "fd"
+
+[tools.bat]
+description = "A cat clone with syntax highlighting"
+
+[tools.bat.installers.cargo]
+package = "bat"
+
+[tools.bat.installers.brew]
+package = "bat"
+
+[tools.bat.installers.apt]
+package = "bat"

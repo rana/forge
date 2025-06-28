@@ -29,7 +29,7 @@ pub struct Tool {
     pub version_detection: Option<VersionPattern>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ToolInstaller {
     // Only tool-specific overrides
     pub package: Option<String>,
