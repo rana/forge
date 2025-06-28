@@ -1,0 +1,28 @@
+version = 2
+
+# Simple command-based installers
+[installers.cargo]
+type = "command"
+check = ["cargo", "--version"]
+install = ["cargo", "install", "{package}", "--locked"]
+
+[installers.github]
+type = "command"
+check = ["gh", "--version"]
+install = ["gh", "release", "download", "--repo", "{repo}", "--pattern", "{pattern}", "--skip-existing", "--dir", "~/.local/bin"]
+
+# Default version detection patterns
+[[version_detection.default]]
+command = ["{tool}", "--version"]
+pattern = "(?:version )?v?([0-9]+\\.[0-9]+\\.[0-9]+)"
+
+# Tools
+[tools.ripgrep]
+description = "Blazing fast search tool"
+
+[tools.ripgrep.installers.cargo]
+package = "ripgrep"
+
+[tools.ripgrep.installers.github]
+repo = "BurntSushi/ripgrep"
+pattern = "ripgrep-{version}-{arch}-unknown-linux-musl.tar.gz"

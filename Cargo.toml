@@ -1,0 +1,23 @@
+[package]
+name = "forge"
+version = "0.1.0"
+edition = "2024"
+authors = ["Rana Ian"]
+description = "A knowledge system for developer tools"
+license = "MIT"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+which = "8.0"
+colored = "3.0"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6.0"
+regex = "1.10"
+futures = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
