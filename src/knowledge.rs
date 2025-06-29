@@ -30,6 +30,8 @@ pub struct Installer {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Tool {
     pub description: String,
+    #[serde(default)]
+    pub provides: Vec<String>,
     pub installers: HashMap<String, ToolInstaller>,
 }
 
@@ -39,6 +41,7 @@ pub struct ToolInstaller {
     pub repo: Option<String>,
     pub pattern: Option<String>,
     pub url: Option<String>,
+    pub scripts: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

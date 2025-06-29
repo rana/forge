@@ -6,10 +6,10 @@ semver = "([0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\\+[a-zA-Z0-9.-]+)?)"
 
 # Platforms
 [platforms.linux]
-precedence = ["cargo", "github", "apt"]
+precedence = ["script", "cargo", "github", "apt"]
 
 [platforms.macos]
-precedence = ["cargo", "github", "brew"]
+precedence = ["script", "cargo", "github", "brew"]
 
 # Installers
 [installers.cargo]
@@ -44,8 +44,39 @@ uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
 install_output_pattern = "Setting up {package} \\(${semver}.*\\)"
 version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
 
+[installers.script]
+type = "script"
+install = ["sh", "-c", "{script}"]
+# No check - scripts are for bootstrapping
+# No uninstall - these tools manage themselves
+
 
 # Tools
+[tools.rust]
+description = "Rust toolchain and cargo package manager"
+provides = ["cargo", "rustc", "rustup"]
+
+[tools.rust.installers.script]
+scripts.linux = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+scripts.macos = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+
+[tools.gh]
+description = "GitHub CLI for interacting with GitHub"
+provides = ["gh"]
+
+[tools.gh.installers.apt]
+package = "gh"
+
+[tools.gh.installers.brew]
+package = "gh"
+
+[tools.homebrew]
+description = "The missing package manager for macOS"
+provides = ["brew"]
+
+[tools.homebrew.installers.script]
+scripts.macos = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+
 [tools.ripgrep]
 description = "Blazing fast search tool that respects .gitignore"
 

@@ -2,7 +2,7 @@ use crate::{
     backend::execute_install,
     color::{ACTION, Colors, INFO, SEARCH, SUCCESS, TIP, WARNING},
     facts::{Facts, ToolFact},
-    knowledge::Knowledge,
+    knowledge::{Knowledge, Tool},
     platform::Platform,
     version::check_latest_version,
 };
@@ -74,45 +74,114 @@ impl Forge {
             Colors::action(&installer_key)
         );
 
-        // Check if installer is available
-        if let Some(check) = &installer.check {
-            let result = Command::new(&check[0]).args(&check[1..]).output();
+        // Check if installer is available (skip for script installers)
+        if installer.installer_type != "script" {
+            if let Some(check) = &installer.check {
+                let result = Command::new(&check[0]).args(&check[1..]).output();
 
-            if result.is_err() || !result.unwrap().status.success() {
-                anyhow::bail!(
-                    "{} installer not available. Please install it first.",
-                    installer_key
-                );
+                if result.is_err() || !result.unwrap().status.success() {
+                    // Look for a tool that provides this installer
+                    if let Some(provider) = self.find_tool_that_provides(&installer_key) {
+                        println!(
+                            "\n{} {} installer not available",
+                            crate::color::ERROR,
+                            installer_key
+                        );
+                        println!(
+                            "\n{} {} is provided by: {}",
+                            crate::color::TIP,
+                            installer_key,
+                            Colors::info(&provider.0)
+                        );
+                        println!("   {}", Colors::muted(&provider.1.description));
+                        println!("\nInstall it with:");
+                        println!(
+                            "   {}",
+                            Colors::action(&format!("forge install {}", provider.0))
+                        );
+
+                        anyhow::bail!("Missing installer");
+                    } else {
+                        anyhow::bail!(
+                            "{} installer not available. Please install it first.",
+                            installer_key
+                        );
+                    }
+                }
             }
         }
 
         // Execute installation and capture version
-        let result = execute_install(
-            installer,
-            tool_name,
-            tool_installer,
-            None,
-            &self.platform,
-            &self.knowledge,
-        )?;
+        let result = if installer.installer_type == "script" {
+            // For script installers, get the platform-specific script
+            let platform_scripts = tool_installer.scripts.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("No scripts defined for {} installer", installer_key)
+            })?;
+
+            let script = platform_scripts.get(&self.platform.os).ok_or_else(|| {
+                anyhow::anyhow!("No script for {} on {}", tool_name, self.platform.os)
+            })?;
+
+            crate::backend::execute_script_install(script, tool_name, &self.platform)?
+        } else {
+            execute_install(
+                installer,
+                tool_name,
+                tool_installer,
+                None,
+                &self.platform,
+                &self.knowledge,
+            )?
+        };
 
         // Record in facts
         facts.tools.insert(
             tool_name.to_string(),
             ToolFact {
                 installed_at: Utc::now(),
-                installer: installer_key,
-                version: Some(result.version.clone()),
+                installer: installer_key.clone(),
+                version: if installer.installer_type == "script" {
+                    None // Don't record version for script installers
+                } else {
+                    Some(result.version.clone())
+                },
             },
         );
         facts.save().await?;
 
-        println!(
-            "{} {} v{} installed successfully!",
-            SUCCESS,
-            Colors::success(tool_name),
-            Colors::warning(&result.version)
-        );
+        // Success message
+        if installer.installer_type == "script" {
+            println!(
+                "{} {} installed successfully!",
+                SUCCESS,
+                Colors::success(tool_name)
+            );
+
+            // Show what commands are now available
+            if let Some(tool) = self.knowledge.tools.get(tool_name) {
+                if !tool.provides.is_empty() {
+                    println!("\nNow available:");
+                    for cmd in &tool.provides {
+                        // Check if command exists and show version if possible
+                        if let Ok(output) = Command::new(cmd).arg("--version").output() {
+                            if output.status.success() {
+                                let version_output = String::from_utf8_lossy(&output.stdout);
+                                let first_line = version_output.lines().next().unwrap_or("");
+                                println!("  • {}", Colors::muted(first_line));
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            println!(
+                "{} {} v{} installed successfully!",
+                SUCCESS,
+                Colors::success(tool_name),
+                Colors::warning(&result.version)
+            );
+        }
+
         Ok(())
     }
 
@@ -229,11 +298,59 @@ impl Forge {
     }
 
     pub async fn uninstall(&self, tool_name: &str) -> Result<()> {
-        println!("{} Uninstalling {}...", ACTION, Colors::info(tool_name));
+        println!(
+            "{} Preparing to uninstall {}...",
+            ACTION,
+            Colors::info(tool_name)
+        );
 
         let mut facts = Facts::load().await?;
 
         if let Some(fact) = facts.tools.get(tool_name) {
+            let tool = self.knowledge.tools.get(tool_name);
+            let provides: &[_] = tool.as_ref().map_or(&[], |t| &t.provides);
+
+            // Check if this tool provides any installers
+            if !provides.is_empty() {
+                // Find all tools installed by the installers this tool provides
+                let dependent_tools: Vec<String> = facts
+                    .tools
+                    .iter()
+                    .filter(|(name, f)| *name != tool_name && provides.contains(&f.installer))
+                    .map(|(name, _)| name.clone())
+                    .collect();
+
+                if !dependent_tools.is_empty() {
+                    println!(
+                        "\n{} {} provides the {} installer",
+                        WARNING,
+                        tool_name,
+                        provides.join(", ")
+                    );
+                    println!("The following tools were installed using it:");
+                    for dep in &dependent_tools {
+                        println!("  • {}", Colors::info(dep));
+                    }
+                    println!("\nThese tools will be removed from Forge's records.");
+                    println!("(The actual binaries may also be removed by the uninstaller)");
+                }
+            }
+
+            // Always ask for confirmation
+            println!(
+                "\n{} Uninstall {}? [y/N] ",
+                WARNING,
+                Colors::warning(tool_name)
+            );
+
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+
+            if !input.trim().eq_ignore_ascii_case("y") {
+                println!("Uninstall cancelled.");
+                return Ok(());
+            }
+
             // Try to use uninstall command if available
             if let Some(installer) = self.knowledge.installers.get(&fact.installer) {
                 if let Some(uninstall_cmd) = &installer.uninstall {
@@ -262,11 +379,50 @@ impl Forge {
                     if !output.status.success() {
                         println!("{} Uninstall command failed", WARNING);
                     }
+                } else if installer.installer_type == "script" {
+                    // Special handling for script-installed tools
+                    match tool_name {
+                        "rust" => {
+                            println!("{} Running: rustup self uninstall", ACTION);
+                            let output = Command::new("rustup")
+                                .args(["self", "uninstall", "-y"])
+                                .output()?;
+
+                            if !output.status.success() {
+                                println!("{} Rustup uninstall failed", WARNING);
+                            }
+                        }
+                        "homebrew" => {
+                            println!("{} To uninstall Homebrew, run:", INFO);
+                            println!(
+                                "   /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\""
+                            );
+                        }
+                        _ => {
+                            println!("{} No uninstaller available for {}", INFO, tool_name);
+                        }
+                    }
                 }
             }
 
             // Remove from facts
             facts.tools.remove(tool_name);
+
+            // Also remove tools that were installed by this tool's installers
+            if !provides.is_empty() {
+                let tools_to_remove: Vec<String> = facts
+                    .tools
+                    .iter()
+                    .filter(|(_, f)| provides.contains(&f.installer))
+                    .map(|(name, _)| name.clone())
+                    .collect();
+
+                for tool in tools_to_remove {
+                    println!("{} Removing {} from records", ACTION, Colors::muted(&tool));
+                    facts.tools.remove(&tool);
+                }
+            }
+
             facts.save().await?;
 
             println!("{} {} uninstalled", SUCCESS, Colors::success(tool_name));
@@ -347,5 +503,13 @@ impl Forge {
             platform_name,
             available
         )
+    }
+
+    fn find_tool_that_provides(&self, command: &str) -> Option<(String, &Tool)> {
+        self.knowledge
+            .tools
+            .iter()
+            .find(|(_, tool)| tool.provides.contains(&command.to_string()))
+            .map(|(name, tool)| (name.clone(), tool))
     }
 }

@@ -59,24 +59,46 @@ pub fn execute_install(
     Ok(InstallResult { version })
 }
 
-fn expand_pattern_refs(pattern: &str, patterns: &HashMap<String, String>) -> String {
-    let mut result = pattern.to_string();
+pub fn execute_script_install(
+    script: &str,
+    _tool_name: &str,
+    platform: &Platform,
+) -> Result<InstallResult> {
+    let expanded_script = platform.expand_pattern(script);
 
-    // Find all ${pattern_name} references and replace them
-    for (name, value) in patterns {
-        let placeholder = format!("${{{}}}", name);
-        result = result.replace(&placeholder, value);
+    println!("🔍 This will run the following script:");
+    println!("{}", crate::color::Colors::muted(&expanded_script));
+    println!("\n⚠️  Please review the script before proceeding.");
+    print!("Continue? [y/N] ");
+
+    use std::io::{self, Write};
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    if !input.trim().eq_ignore_ascii_case("y") {
+        anyhow::bail!("Installation cancelled");
     }
 
-    result
-}
+    println!("🔨 Running installer script...");
 
-fn extract_with_pattern(text: &str, pattern: &str) -> Option<String> {
-    Regex::new(pattern)
-        .ok()
-        .and_then(|re| re.captures(text))
-        .and_then(|c| c.get(1))
-        .map(|m| m.as_str().to_string())
+    // Execute via sh -c
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(&expanded_script)
+        .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Script failed: {}", stderr);
+    }
+
+    // For scripts, we can't reliably extract version
+    // The tool will be detected on next run
+    Ok(InstallResult {
+        version: "installed".to_string(),
+    })
 }
 
 pub fn expand_template(
@@ -97,6 +119,17 @@ pub fn expand_template(
     platform.expand_pattern(&expanded)
 }
 
+fn expand_pattern_refs(pattern: &str, patterns: &HashMap<String, String>) -> String {
+    let mut result = pattern.to_string();
+
+    // Find all ${pattern_name} references and replace them
+    for (name, value) in patterns {
+        let placeholder = format!("${{{}}}", name);
+        result = result.replace(&placeholder, value);
+    }
+
+    result
+}
 pub fn check_tool_version(tool_name: &str, command_template: &[String]) -> Result<Option<String>> {
     let command: Vec<String> = command_template
         .iter()
@@ -121,6 +154,14 @@ fn extract_version(output: &str) -> Option<String> {
     use regex::Regex;
     let re = Regex::new(r"(\d+\.\d+\.\d+)").ok()?;
     re.captures(output)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_string())
+}
+
+fn extract_with_pattern(text: &str, pattern: &str) -> Option<String> {
+    Regex::new(pattern)
+        .ok()
+        .and_then(|re| re.captures(text))
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
 }
