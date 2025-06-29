@@ -332,14 +332,20 @@ impl Forge {
         // Find first available installer in precedence order
         for installer_name in precedence {
             if let Some(tool_installer) = tool.installers.get(installer_name) {
-                return Ok((installer_name.clone(), tool_installer));
+                // Also verify the installer itself exists in knowledge
+                if self.knowledge.installers.contains_key(installer_name) {
+                    return Ok((installer_name.clone(), tool_installer));
+                }
             }
         }
 
+        // If no installer found in precedence, list what's available
+        let available: Vec<&str> = tool.installers.keys().map(|s| s.as_str()).collect();
         anyhow::bail!(
-            "No installers available for {} on {}",
+            "No installer available for {} on {}. Tool supports: {:?}",
             tool_name,
-            platform_name
+            platform_name,
+            available
         )
     }
 }

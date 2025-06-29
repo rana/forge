@@ -9,7 +9,7 @@ semver = "([0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\\+[a-zA-Z0-9.-]+)?)"
 precedence = ["cargo", "github", "apt"]
 
 [platforms.macos]
-precedence = ["brew", "cargo", "github"]
+precedence = ["cargo", "github", "brew"]
 
 # Installers
 [installers.cargo]
@@ -55,10 +55,6 @@ package = "ripgrep"
 [tools.ripgrep.installers.cargo]
 package = "ripgrep"
 
-[tools.ripgrep.installers.github]
-repo = "BurntSushi/ripgrep"
-pattern = "ripgrep-{version}-{arch}-unknown-linux-musl.tar.gz"
-
 [tools.fd]
 description = "User-friendly alternative to find"
 
@@ -71,8 +67,8 @@ package = "fd"
 [tools.bat]
 description = "A cat clone with syntax highlighting"
 
-[tools.bat.installers.cargo]
-package = "bat"
+# [tools.bat.installers.cargo]
+# package = "bat"
 
 [tools.bat.installers.brew]
 package = "bat"
