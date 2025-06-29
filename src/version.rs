@@ -1,57 +1,7 @@
-use crate::knowledge::{VersionCheck, VersionPattern};
+use crate::knowledge::VersionCheck;
 use anyhow::Result;
 use regex::Regex;
 use std::process::Command;
-
-pub struct VersionInfo {
-    pub current: Option<String>,
-    pub latest: Option<String>,
-    pub has_update: bool,
-}
-
-pub fn detect_installed_version(
-    tool_name: &str,
-    patterns: &[VersionPattern],
-) -> Result<Option<String>> {
-    for pattern in patterns {
-        let command = pattern.command
-            .iter()
-            .map(|part| part.replace("{tool}", tool_name))
-            .collect::<Vec<_>>();
-        
-        if command.is_empty() {
-            continue;
-        }
-        
-        let output = Command::new(&command[0])
-            .args(&command[1..])
-            .output();
-        
-        if let Ok(output) = output {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                
-                // Get specific line if specified
-                let text = if let Some(line_num) = pattern.line {
-                    stdout.lines().nth(line_num - 1).unwrap_or("")
-                } else {
-                    &stdout
-                };
-                
-                // Extract version with regex
-                if let Ok(re) = Regex::new(&pattern.pattern) {
-                    if let Some(captures) = re.captures(text) {
-                        if let Some(version) = captures.get(1) {
-                            return Ok(Some(version.as_str().to_string()));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    Ok(None)
-}
 
 pub async fn check_latest_version(
     _installer_name: &str,
@@ -63,7 +13,7 @@ pub async fn check_latest_version(
         Some(vc) => vc,
         None => return Ok(None),
     };
-    
+
     match check.method.to_lowercase().as_str() {
         "command" => {
             // Run command to check version
@@ -72,11 +22,9 @@ pub async fn check_latest_version(
                     .iter()
                     .map(|part| part.replace("{package}", package))
                     .collect();
-                
-                let output = Command::new(&command[0])
-                    .args(&command[1..])
-                    .output()?;
-                
+
+                let output = Command::new(&command[0]).args(&command[1..]).output()?;
+
                 if output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     return Ok(extract_version_from_text(&stdout));
@@ -87,20 +35,20 @@ pub async fn check_latest_version(
             // For now, implement a simple HTTP check
             if let Some(url_template) = &check.url {
                 let url = url_template.replace("{package}", package);
-                
+
                 // Use simple command-based approach for now
-                // In production, would use reqwest
-                let output = Command::new("curl")
-                    .args(["-s", &url])
-                    .output()?;
-                
+                let output = Command::new("curl").args(["-s", &url]).output()?;
+
                 if output.status.success() {
                     let response = String::from_utf8_lossy(&output.stdout);
-                    
+
                     // Extract version based on path
                     if let Some(path) = &check.path {
                         // Simple JSON extraction - look for pattern like "max_version":"1.2.3"
-                        let pattern = format!(r#""{}"\s*:\s*"([^"]+)""#, path);
+                        let pattern = format!(
+                            r#""{}"\s*:\s*"([^"]+)""#,
+                            path.split('.').last().unwrap_or(path)
+                        );
                         if let Ok(re) = Regex::new(&pattern) {
                             if let Some(captures) = re.captures(&response) {
                                 if let Some(version) = captures.get(1) {
@@ -114,7 +62,7 @@ pub async fn check_latest_version(
         }
         _ => {}
     }
-    
+
     Ok(None)
 }
 
@@ -125,7 +73,7 @@ fn extract_version_from_text(text: &str) -> Option<String> {
         r"v(\d+\.\d+\.\d+)",
         r"version[:\s]+(\d+\.\d+\.\d+)",
     ];
-    
+
     for pattern in patterns {
         if let Ok(re) = Regex::new(pattern) {
             if let Some(captures) = re.captures(text) {
@@ -135,6 +83,6 @@ fn extract_version_from_text(text: &str) -> Option<String> {
             }
         }
     }
-    
+
     None
 }

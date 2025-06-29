@@ -36,3 +36,5 @@ pub const WARNING: &str = "⚠️";
 pub const ERROR: &str = "❌";
 pub const TIP: &str = "💡";
 pub const SEARCH: &str = "🔍";
+pub const RUNNING: &str = "⏳";
+pub const PACKAGE: &str = "📦";

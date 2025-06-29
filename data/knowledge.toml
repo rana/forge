@@ -1,6 +1,10 @@
 version = 1
 
-# Platform configurations
+# Patterns
+[patterns]
+semver = "([0-9]+\\.[0-9]+\\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\\+[a-zA-Z0-9.-]+)?)"
+
+# Platforms
 [platforms.linux]
 precedence = ["cargo", "github", "apt"]
 
@@ -13,12 +17,14 @@ type = "command"
 check = ["cargo", "--version"]
 install = ["cargo", "install", "{package}", "--locked"]
 uninstall = ["cargo", "uninstall", "{package}"]
+install_output_pattern = "Installed package `{package} v${semver}"
 version_check = { method = "api", url = "https://crates.io/api/v1/crates/{package}", path = "crate.max_version" }
 
 [installers.github]
 type = "command"
 check = ["gh", "--version"]
 install = ["gh", "release", "download", "--repo", "{repo}", "--pattern", "{pattern}", "--skip-existing", "--dir", "~/.local/bin"]
+install_output_pattern = "Downloading .*v${semver}"
 version_check = { method = "command", command = ["gh", "api", "repos/{repo}/releases/latest", "--jq", ".tag_name"] }
 
 [installers.brew]
@@ -26,6 +32,7 @@ type = "command"
 check = ["brew", "--version"]
 install = ["brew", "install", "{package}"]
 uninstall = ["brew", "uninstall", "{package}"]
+install_output_pattern = "(?:Pouring|Installing) {package}--${semver}"
 version_check = { method = "command", command = ["brew", "info", "--json=v2", "{package}"] }
 
 [installers.apt]
@@ -33,14 +40,10 @@ type = "command"
 check = ["apt", "--version"]
 install = ["sudo", "apt", "install", "-y", "{package}"]
 uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
+# apt includes extra version info, but we can still use semver pattern
+install_output_pattern = "Setting up {package} \\(${semver}.*\\)"
 version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
 
-# Version detection
-[version_detection]
-
-[[version_detection.default]]
-command = ["{tool}", "--version"]
-pattern = "(?:version )?v?([0-9]+\\.[0-9]+\\.[0-9]+)"
 
 # Tools
 [tools.ripgrep]
@@ -55,7 +58,6 @@ package = "ripgrep"
 [tools.ripgrep.installers.github]
 repo = "BurntSushi/ripgrep"
 pattern = "ripgrep-{version}-{arch}-unknown-linux-musl.tar.gz"
-
 
 [tools.fd]
 description = "User-friendly alternative to find"
@@ -86,28 +88,3 @@ package = "git-delta"
 
 [tools.delta.installers.brew]
 package = "git-delta"
-
-# Add kubectl as a complete tool
-[tools.kubectl]
-description = "Kubernetes command-line tool"
-
-[tools.kubectl.installers.github]
-repo = "kubernetes/kubernetes"
-pattern = "kubectl"
-
-[tools.kubectl.version_detection]
-command = ["kubectl", "version", "--client", "--short"]
-pattern = "Client Version: v([0-9]+\\.[0-9]+\\.[0-9]+)"
-
-# Add terraform as a complete tool
-[tools.terraform]
-description = "Infrastructure as Code tool"
-
-[tools.terraform.installers.github]
-repo = "hashicorp/terraform"
-pattern = "terraform_{version}_{os}_{arch}.zip"
-
-[tools.terraform.version_detection]
-command = ["terraform", "version"]
-pattern = "Terraform v([0-9]+\\.[0-9]+\\.[0-9]+)"
-line = 1

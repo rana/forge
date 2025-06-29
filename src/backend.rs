@@ -1,7 +1,8 @@
-use crate::knowledge::{Installer, ToolInstaller};
+use crate::knowledge::{Installer, Knowledge, ToolInstaller};
 use crate::platform::Platform;
 use anyhow::Result;
 use regex::Regex;
+use std::collections::HashMap;
 use std::process::Command;
 
 pub struct InstallResult {
@@ -14,9 +15,10 @@ pub fn execute_install(
     tool_config: &ToolInstaller,
     version: Option<&str>,
     platform: &Platform,
+    knowledge: &Knowledge,
 ) -> Result<InstallResult> {
     let mut command = installer.install.clone();
-    
+
     // Expand templates
     for part in &mut command {
         *part = expand_template(part, tool_name, tool_config, version, platform);
@@ -31,11 +33,50 @@ pub fn execute_install(
         anyhow::bail!("Command failed: {}", stderr);
     }
 
-    // Try to extract version from output
+    // Extract version from output - REQUIRED
+    let pattern_template = installer
+        .install_output_pattern
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No install_output_pattern defined for this installer"))?;
+
+    // Expand both template variables and pattern references
+    let mut pattern = expand_template(pattern_template, tool_name, tool_config, version, platform);
+    pattern = expand_pattern_refs(&pattern, &knowledge.patterns);
+
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let version = extract_version(&stdout).unwrap_or_else(|| "unknown".to_string());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Check both stdout and stderr
+    let version = extract_with_pattern(&stdout, &pattern)
+        .or_else(|| extract_with_pattern(&stderr, &pattern))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Failed to extract version from install output.\nPattern: {}\nHint: Run with FORGE_DEBUG=1 to see full output", 
+                pattern
+            )
+        })?;
 
     Ok(InstallResult { version })
+}
+
+fn expand_pattern_refs(pattern: &str, patterns: &HashMap<String, String>) -> String {
+    let mut result = pattern.to_string();
+
+    // Find all ${pattern_name} references and replace them
+    for (name, value) in patterns {
+        let placeholder = format!("${{{}}}", name);
+        result = result.replace(&placeholder, value);
+    }
+
+    result
+}
+
+fn extract_with_pattern(text: &str, pattern: &str) -> Option<String> {
+    Regex::new(pattern)
+        .ok()
+        .and_then(|re| re.captures(text))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_string())
 }
 
 pub fn expand_template(
@@ -52,16 +93,8 @@ pub fn expand_template(
         .replace("{pattern}", config.pattern.as_deref().unwrap_or("*"))
         .replace("{url}", config.url.as_deref().unwrap_or(""))
         .replace("{version}", version.unwrap_or("latest"));
-    
-    // Platform expansion
-    platform.expand_pattern(&expanded)
-}
 
-fn extract_version(output: &str) -> Option<String> {
-    let re = Regex::new(r"(\d+\.\d+\.\d+)").ok()?;
-    re.captures(output)
-        .and_then(|c| c.get(1))
-        .map(|m| m.as_str().to_string())
+    platform.expand_pattern(&expanded)
 }
 
 pub fn check_tool_version(tool_name: &str, command_template: &[String]) -> Result<Option<String>> {
@@ -82,4 +115,12 @@ pub fn check_tool_version(tool_name: &str, command_template: &[String]) -> Resul
     } else {
         Ok(None)
     }
+}
+
+fn extract_version(output: &str) -> Option<String> {
+    use regex::Regex;
+    let re = Regex::new(r"(\d+\.\d+\.\d+)").ok()?;
+    re.captures(output)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_string())
 }

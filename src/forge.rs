@@ -4,7 +4,7 @@ use crate::{
     facts::{Facts, ToolFact},
     knowledge::Knowledge,
     platform::Platform,
-    version::{check_latest_version, detect_installed_version},
+    version::check_latest_version,
 };
 use anyhow::Result;
 use chrono::Utc;
@@ -58,7 +58,7 @@ impl Forge {
                     anyhow::anyhow!("{} doesn't support installer: {}", tool_name, name)
                 })?
         } else {
-            // Find first available installer for this platform
+            // Use platform precedence
             self.find_best_installer(tool_name, tool)?
         };
 
@@ -86,8 +86,15 @@ impl Forge {
             }
         }
 
-        // Execute installation
-        let result = execute_install(installer, tool_name, tool_installer, None, &self.platform)?;
+        // Execute installation and capture version
+        let result = execute_install(
+            installer,
+            tool_name,
+            tool_installer,
+            None,
+            &self.platform,
+            &self.knowledge,
+        )?;
 
         // Record in facts
         facts.tools.insert(
@@ -118,14 +125,12 @@ impl Forge {
         }
 
         let tools_to_check: Vec<(String, ToolFact)> = if let Some(name) = tool_name {
-            // Update specific tool
             if let Some(fact) = facts.tools.get(name) {
                 vec![(name.to_string(), fact.clone())]
             } else {
                 anyhow::bail!("{} is not installed", name);
             }
         } else {
-            // Update all tools
             facts
                 .tools
                 .iter()
@@ -139,15 +144,7 @@ impl Forge {
 
         for (name, fact) in &tools_to_check {
             if let Some(tool) = self.knowledge.tools.get(name) {
-                // Get version patterns
-                let patterns = if let Some(tool_patterns) = &tool.version_detection {
-                    vec![tool_patterns.clone()]
-                } else {
-                    self.knowledge.version_detection.default.clone()
-                };
-
-                // Check current version
-                let current = detect_installed_version(name, &patterns)?;
+                let current = fact.version.as_deref().unwrap_or("unknown");
 
                 // Check latest version
                 let installer = self.knowledge.installers.get(&fact.installer);
@@ -163,7 +160,7 @@ impl Forge {
                     None
                 };
 
-                let has_update = match (&current, &latest) {
+                let has_update = match (&fact.version, &latest) {
                     (Some(c), Some(l)) => c != l,
                     _ => false,
                 };
@@ -172,7 +169,7 @@ impl Forge {
                     println!(
                         "  {} {} → {}",
                         Colors::info(name),
-                        Colors::muted(current.as_deref().unwrap_or("unknown")),
+                        Colors::muted(current),
                         Colors::success(latest.as_deref().unwrap_or("unknown"))
                     );
                     updates.push((name.clone(), fact.installer.clone(), latest));
@@ -180,7 +177,7 @@ impl Forge {
                     println!(
                         "  {} {} {}",
                         Colors::info(name),
-                        Colors::muted(current.as_deref().unwrap_or("unknown")),
+                        Colors::muted(current),
                         Colors::muted("(up to date)")
                     );
                 }
@@ -323,12 +320,26 @@ impl Forge {
         tool_name: &str,
         tool: &'a crate::knowledge::Tool,
     ) -> Result<(String, &'a crate::knowledge::ToolInstaller)> {
-        // For now, just return the first one
-        // TODO: Add platform precedence from knowledge.toml
-        tool.installers
-            .iter()
-            .next()
-            .map(|(k, v)| (k.clone(), v))
-            .ok_or_else(|| anyhow::anyhow!("No installers available for {}", tool_name))
+        // Get platform precedence
+        let platform_name = &self.platform.os;
+        let precedence = self
+            .knowledge
+            .platforms
+            .get(platform_name)
+            .map(|p| &p.precedence)
+            .ok_or_else(|| anyhow::anyhow!("No platform config for {}", platform_name))?;
+
+        // Find first available installer in precedence order
+        for installer_name in precedence {
+            if let Some(tool_installer) = tool.installers.get(installer_name) {
+                return Ok((installer_name.clone(), tool_installer));
+            }
+        }
+
+        anyhow::bail!(
+            "No installers available for {} on {}",
+            tool_name,
+            platform_name
+        )
     }
 }
