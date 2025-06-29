@@ -41,6 +41,7 @@ pub struct ToolInstaller {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionCheck {
     pub method: String, // "api" or "command"
+    pub command: Option<Vec<String>>, // For command method
     pub url: Option<String>,
     pub path: Option<String>, // JSON path for API method
 }

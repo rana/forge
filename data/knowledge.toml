@@ -13,25 +13,31 @@ type = "command"
 check = ["cargo", "--version"]
 install = ["cargo", "install", "{package}", "--locked"]
 uninstall = ["cargo", "uninstall", "{package}"]
+version_check = { method = "api", url = "https://crates.io/api/v1/crates/{package}", path = "crate.max_version" }
 
 [installers.github]
 type = "command"
 check = ["gh", "--version"]
 install = ["gh", "release", "download", "--repo", "{repo}", "--pattern", "{pattern}", "--skip-existing", "--dir", "~/.local/bin"]
+version_check = { method = "command", command = ["gh", "api", "repos/{repo}/releases/latest", "--jq", ".tag_name"] }
 
 [installers.brew]
 type = "command"
 check = ["brew", "--version"]
 install = ["brew", "install", "{package}"]
 uninstall = ["brew", "uninstall", "{package}"]
+version_check = { method = "command", command = ["brew", "info", "--json=v2", "{package}"] }
 
 [installers.apt]
 type = "command"
 check = ["apt", "--version"]
 install = ["sudo", "apt", "install", "-y", "{package}"]
 uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
+version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
 
 # Version detection
+[version_detection]
+
 [[version_detection.default]]
 command = ["{tool}", "--version"]
 pattern = "(?:version )?v?([0-9]+\\.[0-9]+\\.[0-9]+)"
@@ -40,6 +46,9 @@ pattern = "(?:version )?v?([0-9]+\\.[0-9]+\\.[0-9]+)"
 [tools.ripgrep]
 description = "Blazing fast search tool that respects .gitignore"
 
+[tools.ripgrep.installers.brew]
+package = "ripgrep"
+
 [tools.ripgrep.installers.cargo]
 package = "ripgrep"
 
@@ -47,8 +56,6 @@ package = "ripgrep"
 repo = "BurntSushi/ripgrep"
 pattern = "ripgrep-{version}-{arch}-unknown-linux-musl.tar.gz"
 
-[tools.ripgrep.installers.brew]
-package = "ripgrep"
 
 [tools.fd]
 description = "User-friendly alternative to find"
@@ -70,3 +77,37 @@ package = "bat"
 
 [tools.bat.installers.apt]
 package = "bat"
+
+[tools.delta]
+description = "A syntax-highlighting pager for git"
+
+[tools.delta.installers.cargo]
+package = "git-delta"
+
+[tools.delta.installers.brew]
+package = "git-delta"
+
+# Add kubectl as a complete tool
+[tools.kubectl]
+description = "Kubernetes command-line tool"
+
+[tools.kubectl.installers.github]
+repo = "kubernetes/kubernetes"
+pattern = "kubectl"
+
+[tools.kubectl.version_detection]
+command = ["kubectl", "version", "--client", "--short"]
+pattern = "Client Version: v([0-9]+\\.[0-9]+\\.[0-9]+)"
+
+# Add terraform as a complete tool
+[tools.terraform]
+description = "Infrastructure as Code tool"
+
+[tools.terraform.installers.github]
+repo = "hashicorp/terraform"
+pattern = "terraform_{version}_{os}_{arch}.zip"
+
+[tools.terraform.version_detection]
+command = ["terraform", "version"]
+pattern = "Terraform v([0-9]+\\.[0-9]+\\.[0-9]+)"
+line = 1

@@ -1,9 +1,10 @@
 use crate::{
     backend::execute_install,
-    color::{ACTION, Colors, INFO, SUCCESS, TIP, WARNING},
+    color::{ACTION, Colors, INFO, SEARCH, SUCCESS, TIP, WARNING},
     facts::{Facts, ToolFact},
     knowledge::Knowledge,
     platform::Platform,
+    version::{check_latest_version, detect_installed_version},
 };
 use anyhow::Result;
 use chrono::Utc;
@@ -105,6 +106,128 @@ impl Forge {
             Colors::success(tool_name),
             Colors::warning(&result.version)
         );
+        Ok(())
+    }
+
+    pub async fn update(&self, tool_name: Option<&str>) -> Result<()> {
+        let facts = Facts::load().await?;
+
+        if facts.tools.is_empty() {
+            println!("{}", Colors::muted("No tools installed yet."));
+            return Ok(());
+        }
+
+        let tools_to_check: Vec<(String, ToolFact)> = if let Some(name) = tool_name {
+            // Update specific tool
+            if let Some(fact) = facts.tools.get(name) {
+                vec![(name.to_string(), fact.clone())]
+            } else {
+                anyhow::bail!("{} is not installed", name);
+            }
+        } else {
+            // Update all tools
+            facts
+                .tools
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        };
+
+        println!("{} Checking for updates...", SEARCH);
+
+        let mut updates = Vec::new();
+
+        for (name, fact) in &tools_to_check {
+            if let Some(tool) = self.knowledge.tools.get(name) {
+                // Get version patterns
+                let patterns = if let Some(tool_patterns) = &tool.version_detection {
+                    vec![tool_patterns.clone()]
+                } else {
+                    self.knowledge.version_detection.default.clone()
+                };
+
+                // Check current version
+                let current = detect_installed_version(name, &patterns)?;
+
+                // Check latest version
+                let installer = self.knowledge.installers.get(&fact.installer);
+                let tool_installer = tool.installers.get(&fact.installer);
+                let package = tool_installer
+                    .and_then(|ti| ti.package.as_ref())
+                    .unwrap_or(name);
+
+                let latest = if let Some(inst) = installer {
+                    check_latest_version(&fact.installer, package, inst.version_check.as_ref())
+                        .await?
+                } else {
+                    None
+                };
+
+                let has_update = match (&current, &latest) {
+                    (Some(c), Some(l)) => c != l,
+                    _ => false,
+                };
+
+                if has_update {
+                    println!(
+                        "  {} {} → {}",
+                        Colors::info(name),
+                        Colors::muted(current.as_deref().unwrap_or("unknown")),
+                        Colors::success(latest.as_deref().unwrap_or("unknown"))
+                    );
+                    updates.push((name.clone(), fact.installer.clone(), latest));
+                } else {
+                    println!(
+                        "  {} {} {}",
+                        Colors::info(name),
+                        Colors::muted(current.as_deref().unwrap_or("unknown")),
+                        Colors::muted("(up to date)")
+                    );
+                }
+            }
+        }
+
+        if updates.is_empty() {
+            println!("\n{} All tools are up to date!", SUCCESS);
+            return Ok(());
+        }
+
+        // Ask for confirmation
+        println!(
+            "\n{} {} {} available. Update? [Y/n] ",
+            WARNING,
+            updates.len(),
+            if updates.len() == 1 {
+                "update"
+            } else {
+                "updates"
+            }
+        );
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        if !input.trim().is_empty() && !input.trim().eq_ignore_ascii_case("y") {
+            println!("Update cancelled.");
+            return Ok(());
+        }
+
+        // Perform updates
+        for (tool_name, installer_name, _version) in updates {
+            println!("\n{} Updating {}...", ACTION, Colors::info(&tool_name));
+
+            // Uninstall old version first if uninstall command exists
+            if let Some(installer) = self.knowledge.installers.get(&installer_name) {
+                if installer.uninstall.is_some() {
+                    self.uninstall(&tool_name).await?;
+                }
+            }
+
+            // Install new version
+            self.install(&tool_name, Some(&installer_name)).await?;
+        }
+
+        println!("\n{} Updates complete!", SUCCESS);
         Ok(())
     }
 

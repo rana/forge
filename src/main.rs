@@ -16,24 +16,30 @@ enum Commands {
     Install {
         /// Name of the tool
         tool: String,
-        
+
         /// Specific installer to use
         #[arg(long, short = 'i')]
         installer: Option<String>,
     },
-    
+
+    /// Update installed tools
+    Update {
+        /// Name of specific tool to update (updates all if not specified)
+        tool: Option<String>,
+    },
+
     /// Uninstall a tool
     Uninstall {
         /// Name of the tool
         tool: String,
     },
-    
+
     /// Explain why a tool exists
     Why {
         /// Name of the tool
         tool: String,
     },
-    
+
     /// List installed tools
     List,
 }
@@ -42,10 +48,13 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let forge = Forge::new().await?;
-    
+
     match cli.command {
         Commands::Install { tool, installer } => {
             forge.install(&tool, installer.as_deref()).await?;
+        }
+        Commands::Update { tool } => {
+            forge.update(tool.as_deref()).await?;
         }
         Commands::Uninstall { tool } => {
             forge.uninstall(&tool).await?;
@@ -57,6 +66,6 @@ async fn main() -> Result<()> {
             forge.list().await?;
         }
     }
-    
+
     Ok(())
 }
