@@ -1,0 +1,13 @@
+version = 1
+
+[tools.zed]
+description = "test"
+
+[installers.cargo]
+type = "command"
+
+[tools.aaa]
+description = "should be first"
+
+[patterns]
+test = "pattern"

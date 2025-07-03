@@ -42,6 +42,16 @@ enum Commands {
 
     /// List installed tools
     List,
+
+    /// Format TOML files
+    Fmt {
+        /// Path to TOML file (searches for knowledge.toml if not specified)
+        file: Option<String>,
+
+        /// Check if formatting is needed without modifying
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[tokio::main]
@@ -64,6 +74,9 @@ async fn main() -> Result<()> {
         }
         Commands::List => {
             forge.list().await?;
+        }
+        Commands::Fmt { file, check } => {
+            forge.fmt(file.as_deref(), check).await?;
         }
     }
 

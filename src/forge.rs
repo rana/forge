@@ -471,6 +471,28 @@ impl Forge {
         Ok(())
     }
 
+    pub async fn fmt(&self, file: Option<&str>, check: bool) -> Result<()> {
+        use crate::format::{find_knowledge_files, format_toml};
+
+        println!("{} Formatting TOML files...", INFO);
+
+        let files = find_knowledge_files(file).await?;
+        let mut all_formatted = true;
+
+        for file in files {
+            let formatted = format_toml(&file, check).await?;
+            if !formatted {
+                all_formatted = false;
+            }
+        }
+
+        if check && !all_formatted {
+            anyhow::bail!("Some files need formatting");
+        }
+
+        Ok(())
+    }
+
     fn find_best_installer<'a>(
         &self,
         tool_name: &str,
