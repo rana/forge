@@ -13,6 +13,7 @@ type = "command"
 check = ["apt", "--version"]
 install = ["sudo", "apt", "install", "-y", "{package}"]
 uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
+update = ["sudo", "apt", "upgrade", "-y", "{package}"]
 install_output_pattern = '''Setting up {package}[^ ]* \(([^)]+)\)'''
 version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
 
@@ -21,6 +22,7 @@ type = "command"
 check = ["brew", "--version"]
 install = ["brew", "install", "{package}"]
 uninstall = ["brew", "uninstall", "{package}"]
+update = ["brew", "upgrade", "{package}"]
 install_output_pattern = '''(?:Pouring|Installing) {package}--([0-9]+\.[0-9]+\.[0-9]+(?:_[0-9]+)?(?:-[a-zA-Z0-9.-]+)?)'''
 version_check = { method = "command", command = ["brew", "info", "--json=v2", "{package}"] }
 
@@ -29,6 +31,7 @@ type = "command"
 check = ["cargo", "--version"]
 install = ["cargo", "install", "{package}", "--locked"]
 uninstall = ["cargo", "uninstall", "{package}"]
+update = ["cargo", "install", "{package}", "--locked", "--force"]
 install_output_pattern = '''Installed package `{package} v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)`'''
 version_check = { method = "api", url = "https://crates.io/api/v1/crates/{package}", path = "crate.max_version" }
 
@@ -41,9 +44,19 @@ version_check = { method = "command", command = ["gh", "api", "repos/{repo}/rele
 
 [installers.script]
 type = "script"
-install = ["sh", "-c", "{script}"]
+install = ["sh", "-c", "{install_script}"]
+uninstall = ["sh", "-c", "{uninstall_script}"]
+update = ["sh", "-c", "{update_script}"]
 
 # Tools
+[tools.apt]
+description = "Advanced Package Tool for Debian/Ubuntu"
+provides = ["apt"]
+
+[tools.apt.installers.script.linux]
+install = '''echo "apt is already installed on Debian/Ubuntu systems"'''
+update = '''sudo apt update && sudo apt upgrade -y apt'''
+
 [tools.go]
 description = "The Go programming language"
 provides = ["go", "gofmt"]
@@ -95,10 +108,10 @@ package = "gh"
 description = "The missing package manager for macOS"
 provides = ["brew"]
 
-[tools.homebrew.installers.script]
-macos = '''
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-'''
+[tools.homebrew.installers.script.macos]
+install = '''/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'''
+uninstall = '''echo "To uninstall Homebrew, run:" && echo "/bin/bash -c \\"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\\""'''
+update = '''brew update'''
 
 [tools.ripgrep]
 description = "Blazing fast search tool that respects .gitignore"
@@ -113,10 +126,12 @@ package = "ripgrep"
 description = "Rust toolchain and cargo package manager"
 provides = ["cargo", "rustc", "rustup"]
 
-[tools.rust.installers.script]
-linux = '''
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-'''
-macos = '''
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-'''
+[tools.rust.installers.script.linux]
+install = '''curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'''
+uninstall = '''rustup self uninstall -y 2>/dev/null || echo "Rust not installed via rustup"'''
+update = '''rustup update'''
+
+[tools.rust.installers.script.macos]
+install = '''curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'''
+uninstall = '''rustup self uninstall -y 2>/dev/null || echo "Rust not installed via rustup"'''
+update = '''rustup update'''

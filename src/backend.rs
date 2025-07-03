@@ -1,4 +1,4 @@
-use crate::knowledge::{Installer, Knowledge, ToolInstaller};
+use crate::knowledge::{Installer, ToolInstaller};
 use crate::platform::Platform;
 use anyhow::Result;
 use regex::Regex;

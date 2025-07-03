@@ -26,6 +26,10 @@ enum Commands {
     Update {
         /// Name of specific tool to update (updates all if not specified)
         tool: Option<String>,
+
+        /// Skip updating package managers/installers
+        #[arg(long)]
+        tools_only: bool,
     },
 
     /// Uninstall a tool
@@ -63,8 +67,8 @@ async fn main() -> Result<()> {
         Commands::Install { tool, installer } => {
             forge.install(&tool, installer.as_deref()).await?;
         }
-        Commands::Update { tool } => {
-            forge.update(tool.as_deref()).await?;
+        Commands::Update { tool, tools_only } => {
+            forge.update(tool.as_deref(), tools_only).await?;
         }
         Commands::Uninstall { tool } => {
             forge.uninstall(&tool).await?;

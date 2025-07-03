@@ -22,6 +22,7 @@ pub struct Installer {
     pub check: Option<Vec<String>>,
     pub install: Vec<String>,
     pub uninstall: Option<Vec<String>>,
+    pub update: Option<Vec<String>>, // NEW
     pub install_output_pattern: Option<String>,
     pub version_check: Option<VersionCheck>,
 }
@@ -36,13 +37,23 @@ pub struct Tool {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ToolInstaller {
+    // For command installers
     pub package: Option<String>,
     pub repo: Option<String>,
     pub pattern: Option<String>,
     pub url: Option<String>,
-    pub linux: Option<String>,
-    pub macos: Option<String>,
-    pub windows: Option<String>,
+    
+    // For script installers - platform specific
+    pub linux: Option<PlatformScripts>,
+    pub macos: Option<PlatformScripts>,
+    pub windows: Option<PlatformScripts>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PlatformScripts {
+    pub install: String,
+    pub uninstall: Option<String>,
+    pub update: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

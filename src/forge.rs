@@ -114,18 +114,20 @@ impl Forge {
         // Execute installation and capture version
         let result = if installer.installer_type == "script" {
             // For script installers, get the platform-specific script
-            let script = match self.platform.os.as_str() {
+            let platform_scripts = match self.platform.os.as_str() {
                 "linux" => &tool_installer.linux,
                 "macos" => &tool_installer.macos,
                 "windows" => &tool_installer.windows,
-                _ => &None,
-            }
-            .as_ref()
-            .ok_or_else(|| {
+                _ => {
+                    anyhow::bail!("Platform {} not supported", self.platform.os);
+                }
+            };
+
+            let scripts = platform_scripts.as_ref().ok_or_else(|| {
                 anyhow::anyhow!("No script for {} on {}", tool_name, self.platform.os)
             })?;
 
-            crate::backend::execute_script_install(script, tool_name, &self.platform)?
+            crate::backend::execute_script_install(&scripts.install, tool_name, &self.platform)?
         } else {
             execute_install(installer, tool_name, tool_installer, None, &self.platform)?
         };
@@ -181,7 +183,7 @@ impl Forge {
         Ok(())
     }
 
-    pub async fn update(&self, tool_name: Option<&str>) -> Result<()> {
+    pub async fn update(&self, tool_name: Option<&str>, tools_only: bool) -> Result<()> {
         let facts = Facts::load().await?;
 
         if facts.tools.is_empty() {
@@ -272,6 +274,44 @@ impl Forge {
         if !input.trim().is_empty() && !input.trim().eq_ignore_ascii_case("y") {
             println!("Update cancelled.");
             return Ok(());
+        }
+
+        // Update package managers first (unless --tools-only)
+        if !tools_only {
+            println!("\n{} Updating package managers...", ACTION);
+
+            // Find unique installers used by installed tools
+            let mut installers_to_update = std::collections::HashSet::new();
+            for (_, fact) in &facts.tools {
+                installers_to_update.insert(&fact.installer);
+            }
+
+            // Update each installer's provider
+            for installer_name in installers_to_update {
+                if let Some(provider_tool) = self.find_tool_that_provides(installer_name) {
+                    if let Some(installer) = self.knowledge.installers.get(installer_name) {
+                        if installer.update.is_some() {
+                            println!(
+                                "  {} Updating {} (provides {})",
+                                ACTION,
+                                Colors::info(&provider_tool.0),
+                                installer_name
+                            );
+
+                            // Execute the update
+                            if let Err(e) = self
+                                .execute_installer_update(&provider_tool.0, installer_name)
+                                .await
+                            {
+                                println!(
+                                    "  {} Failed to update {}: {}",
+                                    WARNING, provider_tool.0, e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Perform updates
@@ -368,26 +408,31 @@ impl Forge {
                         println!("{} Uninstall command failed", WARNING);
                     }
                 } else if installer.installer_type == "script" {
-                    // Special handling for script-installed tools
-                    match tool_name {
-                        "rust" => {
-                            println!("{} Running: rustup self uninstall", ACTION);
-                            let output = Command::new("rustup")
-                                .args(["self", "uninstall", "-y"])
-                                .output()?;
+                    // Use platform-specific uninstall script if available
+                    if let Some(tool_def) = self.knowledge.tools.get(tool_name) {
+                        if let Some(tool_installer) = tool_def.installers.get(&fact.installer) {
+                            let platform_scripts = match self.platform.os.as_str() {
+                                "linux" => &tool_installer.linux,
+                                "macos" => &tool_installer.macos,
+                                "windows" => &tool_installer.windows,
+                                _ => &None,
+                            };
 
-                            if !output.status.success() {
-                                println!("{} Rustup uninstall failed", WARNING);
+                            if let Some(scripts) = platform_scripts {
+                                if let Some(uninstall_script) = &scripts.uninstall {
+                                    println!("{} Running uninstall script...", ACTION);
+                                    let output = Command::new("sh")
+                                        .arg("-c")
+                                        .arg(uninstall_script)
+                                        .output()?;
+
+                                    if !output.status.success() {
+                                        println!("{} Uninstall script failed", WARNING);
+                                    }
+                                } else {
+                                    println!("{} No uninstaller available for {}", INFO, tool_name);
+                                }
                             }
-                        }
-                        "homebrew" => {
-                            println!("{} To uninstall Homebrew, run:", INFO);
-                            println!(
-                                "   /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\""
-                            );
-                        }
-                        _ => {
-                            println!("{} No uninstaller available for {}", INFO, tool_name);
                         }
                     }
                 }
@@ -476,6 +521,63 @@ impl Forge {
 
         if check && !all_formatted {
             anyhow::bail!("Some files need formatting");
+        }
+
+        Ok(())
+    }
+
+    async fn execute_installer_update(&self, tool_name: &str, installer_name: &str) -> Result<()> {
+        // For script installers, use platform-specific update script
+        if installer_name == "script" {
+            if let Some(tool) = self.knowledge.tools.get(tool_name) {
+                if let Some(tool_installer) = tool.installers.get("script") {
+                    let platform_scripts = match self.platform.os.as_str() {
+                        "linux" => &tool_installer.linux,
+                        "macos" => &tool_installer.macos,
+                        "windows" => &tool_installer.windows,
+                        _ => return Ok(()),
+                    };
+
+                    if let Some(scripts) = platform_scripts {
+                        if let Some(update_script) = &scripts.update {
+                            let output =
+                                Command::new("sh").arg("-c").arg(update_script).output()?;
+
+                            if !output.status.success() {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                anyhow::bail!("Update script failed: {}", stderr);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // For command installers, use the update command if available
+            if let Some(installer) = self.knowledge.installers.get(installer_name) {
+                if let Some(update_cmd) = &installer.update {
+                    if let Some(tool) = self.knowledge.tools.get(tool_name) {
+                        if let Some(tool_installer) = tool.installers.get(installer_name) {
+                            let mut command = update_cmd.clone();
+                            for part in &mut command {
+                                *part = crate::backend::expand_template(
+                                    part,
+                                    tool_name,
+                                    tool_installer,
+                                    None,
+                                    &self.platform,
+                                );
+                            }
+
+                            let output = Command::new(&command[0]).args(&command[1..]).output()?;
+
+                            if !output.status.success() {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                anyhow::bail!("Update command failed: {}", stderr);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
