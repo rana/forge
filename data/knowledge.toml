@@ -13,7 +13,7 @@ type = "command"
 check = ["apt", "--version"]
 install = ["sudo", "apt", "install", "-y", "{package}"]
 uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
-install_output_pattern = '''Setting up {package} \(([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]+)?)\)'''
+install_output_pattern = '''Setting up {package}[^ ]* \(([^)]+)\)'''
 version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
 
 [installers.brew]
@@ -44,6 +44,16 @@ type = "script"
 install = ["sh", "-c", "{script}"]
 
 # Tools
+[tools.go]
+description = "The Go programming language"
+provides = ["go", "gofmt"]
+
+[tools.go.installers.apt]
+package = "golang-go"
+
+[tools.go.installers.brew]
+package = "go"
+
 [tools.bat]
 description = "A cat clone with syntax highlighting"
 
