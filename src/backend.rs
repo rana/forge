@@ -2,7 +2,6 @@ use crate::knowledge::{Installer, Knowledge, ToolInstaller};
 use crate::platform::Platform;
 use anyhow::Result;
 use regex::Regex;
-use std::collections::HashMap;
 use std::process::Command;
 
 pub struct InstallResult {
@@ -39,17 +38,20 @@ pub fn execute_install(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No install_output_pattern defined for this installer"))?;
 
-    // Expand both template variables and pattern references
-    let mut pattern = expand_template(pattern_template, tool_name, tool_config, version, platform);
-    pattern = expand_pattern_refs(&pattern, &knowledge.patterns);
+    // Just expand template variables, no pattern refs
+    let pattern = expand_template(pattern_template, tool_name, tool_config, version, platform);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}\n{}", stdout, stderr);
 
-    // Check both stdout and stderr
-    let version = extract_with_pattern(&stdout, &pattern)
-        .or_else(|| extract_with_pattern(&stderr, &pattern))
+    // Check combined output
+    let version = extract_with_pattern(&combined, &pattern)
         .ok_or_else(|| {
+            if std::env::var("FORGE_DEBUG").is_ok() {
+                eprintln!("DEBUG: Pattern: {}", pattern);
+                eprintln!("DEBUG: Output:\n{}", combined);
+            }
             anyhow::anyhow!(
                 "Failed to extract version from install output.\nPattern: {}\nHint: Run with FORGE_DEBUG=1 to see full output", 
                 pattern
@@ -119,17 +121,6 @@ pub fn expand_template(
     platform.expand_pattern(&expanded)
 }
 
-fn expand_pattern_refs(pattern: &str, patterns: &HashMap<String, String>) -> String {
-    let mut result = pattern.to_string();
-
-    // Find all ${pattern_name} references and replace them
-    for (name, value) in patterns {
-        let placeholder = format!("${{{}}}", name);
-        result = result.replace(&placeholder, value);
-    }
-
-    result
-}
 pub fn check_tool_version(tool_name: &str, command_template: &[String]) -> Result<Option<String>> {
     let command: Vec<String> = command_template
         .iter()

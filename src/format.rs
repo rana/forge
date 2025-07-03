@@ -84,25 +84,7 @@ fn format_document(doc: &Value) -> Result<String> {
     }
     output.push('\n');
 
-    // 2. Patterns
-    if let Some(patterns) = table.get("patterns") {
-        output.push_str("# Patterns\n");
-        output.push_str("[patterns]\n");
-        if let Value::Table(patterns_table) = patterns {
-            // All values in patterns section should use raw strings
-            let sorted: BTreeMap<_, _> = patterns_table.iter().collect();
-            for (key, val) in sorted {
-                if let Value::String(s) = val {
-                    output.push_str(&format!("{} = '''{}'''\n", key, s));
-                } else {
-                    output.push_str(&format!("{} = {}\n", key, serialize_value(val)?));
-                }
-            }
-        }
-        output.push('\n');
-    }
-
-    // 3. Platforms
+    // 2. Platforms
     if let Some(platforms) = table.get("platforms") {
         output.push_str("# Platforms\n");
         if let Value::Table(platforms_table) = platforms {
@@ -117,7 +99,7 @@ fn format_document(doc: &Value) -> Result<String> {
         }
     }
 
-    // 4. Installers
+    // 3. Installers
     if let Some(installers) = table.get("installers") {
         output.push_str("# Installers\n");
         if let Value::Table(installers_table) = installers {
@@ -132,7 +114,7 @@ fn format_document(doc: &Value) -> Result<String> {
         }
     }
 
-    // 5. Tools
+    // 4. Tools
     if let Some(tools) = table.get("tools") {
         output.push_str("# Tools\n");
         if let Value::Table(tools_table) = tools {

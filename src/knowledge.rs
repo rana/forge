@@ -5,7 +5,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Knowledge {
     pub version: u32,
-    pub patterns: HashMap<String, String>,
     pub installers: HashMap<String, Installer>,
     pub tools: HashMap<String, Tool>,
     pub platforms: HashMap<String, PlatformConfig>,
@@ -23,7 +22,7 @@ pub struct Installer {
     pub check: Option<Vec<String>>,
     pub install: Vec<String>,
     pub uninstall: Option<Vec<String>>,
-    pub install_output_pattern: Option<String>,  // NEW
+    pub install_output_pattern: Option<String>,
     pub version_check: Option<VersionCheck>,
 }
 
