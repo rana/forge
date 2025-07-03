@@ -14,7 +14,6 @@ pub fn execute_install(
     tool_config: &ToolInstaller,
     version: Option<&str>,
     platform: &Platform,
-    knowledge: &Knowledge,
 ) -> Result<InstallResult> {
     let mut command = installer.install.clone();
 
@@ -68,20 +67,8 @@ pub fn execute_script_install(
 ) -> Result<InstallResult> {
     let expanded_script = platform.expand_pattern(script);
 
-    println!("🔍 This will run the following script:");
+    println!("🔍 Running the following script:");
     println!("{}", crate::color::Colors::muted(&expanded_script));
-    println!("\n⚠️  Please review the script before proceeding.");
-    print!("Continue? [y/N] ");
-
-    use std::io::{self, Write};
-    io::stdout().flush()?;
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-
-    if !input.trim().eq_ignore_ascii_case("y") {
-        anyhow::bail!("Installation cancelled");
-    }
 
     println!("🔨 Running installer script...");
 

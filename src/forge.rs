@@ -130,7 +130,6 @@ impl Forge {
                 tool_installer,
                 None,
                 &self.platform,
-                &self.knowledge,
             )?
         };
 
@@ -336,20 +335,12 @@ impl Forge {
                 }
             }
 
-            // Always ask for confirmation
+            // No confirmation needed - trust the user
             println!(
-                "\n{} Uninstall {}? [y/N] ",
-                WARNING,
+                "\n{} Uninstalling {}...",
+                ACTION,
                 Colors::warning(tool_name)
             );
-
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input)?;
-
-            if !input.trim().eq_ignore_ascii_case("y") {
-                println!("Uninstall cancelled.");
-                return Ok(());
-            }
 
             // Try to use uninstall command if available
             if let Some(installer) = self.knowledge.installers.get(&fact.installer) {
