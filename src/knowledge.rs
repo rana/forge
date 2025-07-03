@@ -40,7 +40,9 @@ pub struct ToolInstaller {
     pub repo: Option<String>,
     pub pattern: Option<String>,
     pub url: Option<String>,
-    pub scripts: Option<HashMap<String, String>>,
+    pub linux: Option<String>,
+    pub macos: Option<String>,
+    pub windows: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

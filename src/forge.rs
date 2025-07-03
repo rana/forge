@@ -114,23 +114,20 @@ impl Forge {
         // Execute installation and capture version
         let result = if installer.installer_type == "script" {
             // For script installers, get the platform-specific script
-            let platform_scripts = tool_installer.scripts.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("No scripts defined for {} installer", installer_key)
-            })?;
-
-            let script = platform_scripts.get(&self.platform.os).ok_or_else(|| {
+            let script = match self.platform.os.as_str() {
+                "linux" => &tool_installer.linux,
+                "macos" => &tool_installer.macos,
+                "windows" => &tool_installer.windows,
+                _ => &None,
+            }
+            .as_ref()
+            .ok_or_else(|| {
                 anyhow::anyhow!("No script for {} on {}", tool_name, self.platform.os)
             })?;
 
             crate::backend::execute_script_install(script, tool_name, &self.platform)?
         } else {
-            execute_install(
-                installer,
-                tool_name,
-                tool_installer,
-                None,
-                &self.platform,
-            )?
+            execute_install(installer, tool_name, tool_installer, None, &self.platform)?
         };
 
         // Record in facts
