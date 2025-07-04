@@ -76,7 +76,6 @@ package = "bufbuild/buf/buf"
 
 [tools.buf.installers.github]
 repo = "bufbuild/buf"
-pattern = "buf-{os}-{arch}"
 
 [tools.delta]
 description = "A syntax-highlighting pager for git"
@@ -86,6 +85,9 @@ package = "git-delta"
 
 [tools.delta.installers.cargo]
 package = "git-delta"
+
+[tools.delta.installers.github]
+repo = "dandavison/delta"
 
 [tools.fd]
 description = "User-friendly alternative to find"
@@ -181,12 +183,16 @@ echo "pnpm uninstalled. Restart your shell or source your config file."'''
 
 [tools.ripgrep]
 description = "Blazing fast search tool that respects .gitignore"
+provides = ["rg"]
 
 [tools.ripgrep.installers.brew]
 package = "ripgrep"
 
 [tools.ripgrep.installers.cargo]
 package = "ripgrep"
+
+[tools.ripgrep.installers.github]
+repo = "BurntSushi/ripgrep"
 
 [tools.rust]
 description = "Rust toolchain and cargo package manager"
@@ -209,7 +215,6 @@ provides = ["uv", "uvx"]
 
 [tools.uv.installers.github]
 repo = "astral-sh/uv"
-pattern = "uv-{target}.tar.gz"
 
 [tools.uv.installers.script.linux]
 install = '''curl -LsSf https://astral.sh/uv/install.sh | sh'''

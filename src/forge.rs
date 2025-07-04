@@ -128,6 +128,9 @@ impl Forge {
             })?;
 
             crate::backend::execute_script_install(&scripts.install, tool_name, &self.platform)?
+        } else if installer_key == "github" {
+            // Use smart GitHub installer
+            crate::backend::execute_github_install(tool_name, tool_installer, tool, &self.platform)?
         } else {
             execute_install(installer, tool_name, tool_installer, None, &self.platform)?
         };
@@ -143,6 +146,7 @@ impl Forge {
                 } else {
                     Some(result.version.clone())
                 },
+                executables: result.executables.clone(),
             },
         );
         facts.save().await?;
@@ -378,6 +382,21 @@ impl Forge {
                 ACTION,
                 Colors::warning(tool_name)
             );
+
+            // Remove the actual executables first
+            if let Some(executables) = &fact.executables {
+                for exe in executables {
+                    let exe_path = dirs::home_dir()
+                        .ok_or_else(|| anyhow::anyhow!("No home directory"))?
+                        .join(".local/bin")
+                        .join(exe);
+
+                    if exe_path.exists() {
+                        println!("  {} Removing executable: {}", ACTION, exe);
+                        std::fs::remove_file(&exe_path)?;
+                    }
+                }
+            }
 
             // Try to use uninstall command if available
             if let Some(installer) = self.knowledge.installers.get(&fact.installer) {

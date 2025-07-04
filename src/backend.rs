@@ -1,5 +1,5 @@
 use crate::command::{CommandRunner, SystemCommandRunner};
-use crate::knowledge::{Installer, ToolInstaller};
+use crate::knowledge::{Installer, Tool, ToolInstaller};
 use crate::platform::Platform;
 use anyhow::Result;
 use regex::Regex;
@@ -7,6 +7,7 @@ use std::process::Command;
 
 pub struct InstallResult {
     pub version: String,
+    pub executables: Option<Vec<String>>,
 }
 
 pub fn execute_install(
@@ -76,7 +77,10 @@ pub fn execute_install_with_runner(
             )
         })?;
 
-    Ok(InstallResult { version })
+    Ok(InstallResult {
+        version,
+        executables: None,
+    })
 }
 
 pub fn execute_script_install(
@@ -106,6 +110,79 @@ pub fn execute_script_install(
     // The tool will be detected on next run
     Ok(InstallResult {
         version: "installed".to_string(),
+        executables: None,
+    })
+}
+
+pub fn execute_github_install(
+    tool_name: &str,
+    tool_config: &ToolInstaller,
+    tool: &Tool,
+    platform: &Platform,
+) -> Result<InstallResult> {
+    use crate::github::{discover_asset, download_and_install};
+
+    let repo = tool_config
+        .repo
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("GitHub installer requires 'repo' field"))?;
+
+    // If pattern is provided, use the old behavior
+    if let Some(pattern) = &tool_config.pattern {
+        // Use existing gh CLI approach
+        let expanded_pattern = platform.expand_pattern(pattern);
+
+        let output = Command::new("gh")
+            .args(&[
+                "release",
+                "download",
+                "--repo",
+                repo,
+                "--pattern",
+                &expanded_pattern,
+                "--skip-existing",
+                "--dir",
+                "~/.local/bin",
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("GitHub download failed: {}", stderr);
+        }
+
+        // Extract version from output if possible
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let version = extract_version(&stdout).unwrap_or_else(|| "unknown".to_string());
+
+        return Ok(InstallResult {
+            version,
+            executables: None
+        });
+    }
+
+    // Smart discovery path
+    let discovery = discover_asset(repo, &platform.os, &platform.arch)?;
+
+    // Get provides hint from tool definition
+    let provides_hint = &tool.provides;
+
+    // Download and install
+    let install_result = download_and_install(
+        &discovery.download_url,
+        &discovery.asset_name,
+        tool_name,
+        provides_hint,
+    )?;
+
+    // Print what we installed
+    for exe in &install_result.executables {
+        println!("  Installed: {}", exe);
+    }
+
+    Ok(InstallResult {
+        version: discovery.version,
+        executables: Some(install_result.executables),
     })
 }
 

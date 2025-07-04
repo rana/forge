@@ -4,6 +4,7 @@ pub mod command;
 pub mod facts;
 pub mod forge;
 pub mod format;
+pub mod github;
 pub mod knowledge;
 pub mod platform;
 pub mod version;

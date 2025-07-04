@@ -14,7 +14,10 @@ pub struct ToolFact {
     pub installed_at: DateTime<Utc>,
     pub installer: String,
     pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub executables: Option<Vec<String>>,
 }
+
 
 impl Facts {
     pub async fn load() -> Result<Self> {
