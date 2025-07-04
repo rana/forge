@@ -17,10 +17,5 @@ jobs:
     - name: Run tests
       run: cargo test
     
-    - name: Run integration tests with debug output
-      run: |
-        echo "Running integration tests with debug output..."
-        cargo test -- --ignored --nocapture
-      env:
-        RUST_BACKTRACE: 1
-        FORGE_DEBUG: 1
+    - name: Run integration tests
+      run: cargo test -- --ignored
