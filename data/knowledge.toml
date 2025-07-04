@@ -1,50 +1,195 @@
 version = 1
 
-# Platform configurations
+# Platforms
 [platforms.linux]
-precedence = ["cargo", "github", "apt"]
+precedence = ["script", "cargo", "github", "apt"]
 
 [platforms.macos]
-precedence = ["brew", "cargo", "github"]
+precedence = ["script", "cargo", "github", "brew"]
 
 # Installers
-[installers.cargo]
+[installers.apt]
 type = "command"
-check = ["cargo", "--version"]
-install = ["cargo", "install", "{package}", "--locked"]
-uninstall = ["cargo", "uninstall", "{package}"]
-version_check = { method = "api", url = "https://crates.io/api/v1/crates/{package}", path = "crate.max_version" }
-
-[installers.github]
-type = "command"
-check = ["gh", "--version"]
-install = ["gh", "release", "download", "--repo", "{repo}", "--pattern", "{pattern}", "--skip-existing", "--dir", "~/.local/bin"]
-version_check = { method = "command", command = ["gh", "api", "repos/{repo}/releases/latest", "--jq", ".tag_name"] }
+check = ["apt", "--version"]
+install = ["sudo", "apt", "install", "-y", "{package}"]
+uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
+install_output_pattern = '''Setting up {package}[^ ]* \(([^)]+)\)'''
+version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
+update = ["sudo", "apt", "upgrade", "-y", "{package}"]
 
 [installers.brew]
 type = "command"
 check = ["brew", "--version"]
 install = ["brew", "install", "{package}"]
 uninstall = ["brew", "uninstall", "{package}"]
+install_output_pattern = '''(?:Pouring|Installing) {package}--([0-9]+\.[0-9]+\.[0-9]+(?:_[0-9]+)?(?:-[a-zA-Z0-9.-]+)?)'''
 version_check = { method = "command", command = ["brew", "info", "--json=v2", "{package}"] }
+update = ["brew", "upgrade", "{package}"]
 
-[installers.apt]
+[installers.cargo]
 type = "command"
-check = ["apt", "--version"]
-install = ["sudo", "apt", "install", "-y", "{package}"]
-uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
-version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
+check = ["cargo", "--version"]
+install = ["cargo", "install", "{package}", "--locked"]
+uninstall = ["cargo", "uninstall", "{package}"]
+install_output_pattern = '''package `{package} v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)`'''
+version_check = { method = "api", url = "https://crates.io/api/v1/crates/{package}", path = "crate.max_version" }
+update = ["cargo", "install", "{package}", "--locked", "--force"]
 
-# Version detection
-[version_detection]
+[installers.github]
+type = "command"
+check = ["gh", "--version"]
+install = ["gh", "release", "download", "--repo", "{repo}", "--pattern", "{pattern}", "--skip-existing", "--dir", "~/.local/bin"]
+install_output_pattern = '''Downloading .*v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)'''
+version_check = { method = "command", command = ["gh", "api", "repos/{repo}/releases/latest", "--jq", ".tag_name"] }
 
-[[version_detection.default]]
-command = ["{tool}", "--version"]
-pattern = "(?:version )?v?([0-9]+\\.[0-9]+\\.[0-9]+)"
+[installers.script]
+type = "script"
+install = ["sh", "-c", "{install_script}"]
+uninstall = ["sh", "-c", "{uninstall_script}"]
+update = ["sh", "-c", "{update_script}"]
 
 # Tools
+[tools.apt]
+description = "Advanced Package Tool for Debian/Ubuntu"
+provides = ["apt"]
+
+[tools.apt.installers.script.linux]
+install = '''echo "apt is already installed on Debian/Ubuntu systems"'''
+update = '''sudo apt update && sudo apt upgrade -y apt'''
+
+
+[tools.bat]
+description = "A cat clone with syntax highlighting"
+
+[tools.bat.installers.apt]
+package = "bat"
+
+[tools.bat.installers.brew]
+package = "bat"
+
+[tools.buf]
+description = "A new way of working with Protocol Buffers"
+provides = ["buf"]
+
+[tools.buf.installers.brew]
+package = "bufbuild/buf/buf"
+
+[tools.buf.installers.github]
+repo = "bufbuild/buf"
+
+[tools.delta]
+description = "A syntax-highlighting pager for git"
+
+[tools.delta.installers.brew]
+package = "git-delta"
+
+[tools.delta.installers.cargo]
+package = "git-delta"
+
+[tools.delta.installers.github]
+repo = "dandavison/delta"
+
+[tools.fd]
+description = "User-friendly alternative to find"
+
+[tools.fd.installers.brew]
+package = "fd"
+
+[tools.fd.installers.cargo]
+package = "fd-find"
+
+[tools.forge]
+description = "A knowledge system for developer tools"
+
+[tools.forge.installers.github]
+repo = "rana/forge"
+
+[tools.gh]
+description = "GitHub CLI for interacting with GitHub"
+provides = ["gh"]
+
+[tools.gh.installers.apt]
+package = "gh"
+
+[tools.gh.installers.brew]
+package = "gh"
+
+[tools.git-flow]
+description = "Git extensions to provide high-level repository operations"
+
+[tools.git-flow.installers.apt]
+package = "git-flow"
+
+[tools.git-flow.installers.brew]
+package = "git-flow"
+
+[tools.go]
+description = "The Go programming language"
+provides = ["go", "gofmt"]
+
+[tools.go.installers.apt]
+package = "golang-go"
+
+[tools.go.installers.brew]
+package = "go"
+
+[tools.homebrew]
+description = "The missing package manager for macOS"
+provides = ["brew"]
+
+[tools.homebrew.installers.script.macos]
+install = '''/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'''
+uninstall = '''echo "To uninstall Homebrew, run:" && echo "/bin/bash -c \\"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\\""'''
+update = '''brew update'''
+
+
+[tools.kubectl]
+description = "Kubernetes command-line tool"
+provides = ["kubectl"]
+
+[tools.kubectl.installers.brew]
+package = "kubernetes-cli"
+
+[tools.kubectl.installers.script.linux]
+install = '''mkdir -p ~/.local/bin
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/{arch}/kubectl"
+chmod +x kubectl
+mv kubectl ~/.local/bin/
+echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"'''
+uninstall = '''rm -f ~/.local/bin/kubectl'''
+
+[tools.kubectl.installers.script.macos]
+install = '''mkdir -p ~/.local/bin
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/darwin/{arch}/kubectl"
+chmod +x kubectl
+mv kubectl ~/.local/bin/
+echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"'''
+uninstall = '''rm -f ~/.local/bin/kubectl'''
+
+
+[tools.pnpm]
+description = "Fast, disk space efficient package manager"
+provides = ["pnpm", "pnpx"]
+
+[tools.pnpm.installers.brew]
+package = "pnpm"
+
+[tools.pnpm.installers.script.linux]
+install = '''curl -fsSL https://get.pnpm.io/install.sh | sh -'''
+uninstall = '''rm -rf ~/.local/share/pnpm
+sed -i '/# pnpm/,/# pnpm end/d' ~/.bashrc ~/.zshrc ~/.config/fish/config.fish 2>/dev/null || true
+echo "pnpm uninstalled. Restart your shell or source your config file."'''
+
+[tools.pnpm.installers.script.macos]
+install = '''curl -fsSL https://get.pnpm.io/install.sh | sh -'''
+uninstall = '''rm -rf ~/Library/pnpm
+sed -i '' '/# pnpm/,/# pnpm end/d' ~/.bashrc ~/.zshrc ~/.config/fish/config.fish 2>/dev/null || true
+echo "pnpm uninstalled. Restart your shell or source your config file."'''
+
+
 [tools.ripgrep]
 description = "Blazing fast search tool that respects .gitignore"
+provides = ["rg"]
 
 [tools.ripgrep.installers.brew]
 package = "ripgrep"
@@ -54,60 +199,34 @@ package = "ripgrep"
 
 [tools.ripgrep.installers.github]
 repo = "BurntSushi/ripgrep"
-pattern = "ripgrep-{version}-{arch}-unknown-linux-musl.tar.gz"
+
+[tools.rust]
+description = "Rust toolchain and cargo package manager"
+provides = ["cargo", "rustc", "rustup"]
+
+[tools.rust.installers.script.linux]
+install = '''curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'''
+uninstall = '''rustup self uninstall -y 2>/dev/null || echo "Rust not installed via rustup"'''
+update = '''rustup update'''
+
+[tools.rust.installers.script.macos]
+install = '''curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'''
+uninstall = '''rustup self uninstall -y 2>/dev/null || echo "Rust not installed via rustup"'''
+update = '''rustup update'''
 
 
-[tools.fd]
-description = "User-friendly alternative to find"
+[tools.uv]
+description = "An extremely fast Python package installer and resolver"
+provides = ["uv", "uvx"]
 
-[tools.fd.installers.cargo]
-package = "fd-find"
+[tools.uv.installers.github]
+repo = "astral-sh/uv"
 
-[tools.fd.installers.brew]
-package = "fd"
+[tools.uv.installers.script.linux]
+install = '''curl -LsSf https://astral.sh/uv/install.sh | sh'''
+uninstall = '''rm -f ~/.cargo/bin/uv ~/.cargo/bin/uvx'''
 
-[tools.bat]
-description = "A cat clone with syntax highlighting"
+[tools.uv.installers.script.macos]
+install = '''curl -LsSf https://astral.sh/uv/install.sh | sh'''
+uninstall = '''rm -f ~/.cargo/bin/uv ~/.cargo/bin/uvx'''
 
-[tools.bat.installers.cargo]
-package = "bat"
-
-[tools.bat.installers.brew]
-package = "bat"
-
-[tools.bat.installers.apt]
-package = "bat"
-
-[tools.delta]
-description = "A syntax-highlighting pager for git"
-
-[tools.delta.installers.cargo]
-package = "git-delta"
-
-[tools.delta.installers.brew]
-package = "git-delta"
-
-# Add kubectl as a complete tool
-[tools.kubectl]
-description = "Kubernetes command-line tool"
-
-[tools.kubectl.installers.github]
-repo = "kubernetes/kubernetes"
-pattern = "kubectl"
-
-[tools.kubectl.version_detection]
-command = ["kubectl", "version", "--client", "--short"]
-pattern = "Client Version: v([0-9]+\\.[0-9]+\\.[0-9]+)"
-
-# Add terraform as a complete tool
-[tools.terraform]
-description = "Infrastructure as Code tool"
-
-[tools.terraform.installers.github]
-repo = "hashicorp/terraform"
-pattern = "terraform_{version}_{os}_{arch}.zip"
-
-[tools.terraform.version_detection]
-command = ["terraform", "version"]
-pattern = "Terraform v([0-9]+\\.[0-9]+\\.[0-9]+)"
-line = 1

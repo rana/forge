@@ -26,6 +26,10 @@ enum Commands {
     Update {
         /// Name of specific tool to update (updates all if not specified)
         tool: Option<String>,
+
+        /// Skip updating package managers/installers
+        #[arg(long)]
+        tools_only: bool,
     },
 
     /// Uninstall a tool
@@ -42,6 +46,16 @@ enum Commands {
 
     /// List installed tools
     List,
+
+    /// Format TOML files
+    Fmt {
+        /// Path to TOML file (searches for knowledge.toml if not specified)
+        file: Option<String>,
+
+        /// Check if formatting is needed without modifying
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[tokio::main]
@@ -53,8 +67,8 @@ async fn main() -> Result<()> {
         Commands::Install { tool, installer } => {
             forge.install(&tool, installer.as_deref()).await?;
         }
-        Commands::Update { tool } => {
-            forge.update(tool.as_deref()).await?;
+        Commands::Update { tool, tools_only } => {
+            forge.update(tool.as_deref(), tools_only).await?;
         }
         Commands::Uninstall { tool } => {
             forge.uninstall(&tool).await?;
@@ -64,6 +78,9 @@ async fn main() -> Result<()> {
         }
         Commands::List => {
             forge.list().await?;
+        }
+        Commands::Fmt { file, check } => {
+            forge.fmt(file.as_deref(), check).await?;
         }
     }
 

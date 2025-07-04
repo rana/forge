@@ -7,8 +7,12 @@ pub struct Knowledge {
     pub version: u32,
     pub installers: HashMap<String, Installer>,
     pub tools: HashMap<String, Tool>,
-    #[serde(default)]
-    pub version_detection: VersionDetection,
+    pub platforms: HashMap<String, PlatformConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PlatformConfig {
+    pub precedence: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -18,44 +22,46 @@ pub struct Installer {
     pub check: Option<Vec<String>>,
     pub install: Vec<String>,
     pub uninstall: Option<Vec<String>>,
+    pub update: Option<Vec<String>>, // NEW
+    pub install_output_pattern: Option<String>,
     pub version_check: Option<VersionCheck>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Tool {
     pub description: String,
-    pub installers: HashMap<String, ToolInstaller>,
     #[serde(default)]
-    pub version_detection: Option<VersionPattern>,
+    pub provides: Vec<String>,
+    pub installers: HashMap<String, ToolInstaller>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ToolInstaller {
-    // Only tool-specific overrides
+    // For command installers
     pub package: Option<String>,
     pub repo: Option<String>,
     pub pattern: Option<String>,
     pub url: Option<String>,
+    
+    // For script installers - platform specific
+    pub linux: Option<PlatformScripts>,
+    pub macos: Option<PlatformScripts>,
+    pub windows: Option<PlatformScripts>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PlatformScripts {
+    pub install: String,
+    pub uninstall: Option<String>,
+    pub update: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionCheck {
-    pub method: String, // "api" or "command"
-    pub command: Option<Vec<String>>, // For command method
+    pub method: String,
+    pub command: Option<Vec<String>>,
     pub url: Option<String>,
-    pub path: Option<String>, // JSON path for API method
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct VersionDetection {
-    pub default: Vec<VersionPattern>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct VersionPattern {
-    pub command: Vec<String>,
-    pub pattern: String,
-    pub line: Option<usize>,
+    pub path: Option<String>,
 }
 
 impl Knowledge {
