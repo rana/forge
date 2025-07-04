@@ -177,42 +177,47 @@ fn serialize_tool_installer(
         let is_script_installer = installer_name == "script";
 
         if is_script_installer {
-            output.push_str(&format!(
-                "[tools.{}.installers.{}]\n",
-                tool_name, installer_name
-            ));
+            // Check for platform keys (linux, macos, windows)
+            let platform_keys = ["linux", "macos", "windows"];
+            let has_platforms = platform_keys.iter().any(|k| table.contains_key(*k));
 
-            // Check if we have the old structure with nested scripts
-            if let Some(scripts_value) = table.get("scripts") {
-                if let Value::Table(scripts_table) = scripts_value {
-                    // Flatten the scripts to top level
-                    let sorted: BTreeMap<_, _> = scripts_table.iter().collect();
-                    for (platform, script) in sorted {
-                        if let Value::String(s) = script {
-                            output.push_str(&format!("{} = '''\n{}\n'''\n", platform, s.trim()));
-                        } else {
-                            output.push_str(&format!(
-                                "{} = {}\n",
-                                platform,
-                                serialize_value(script)?
-                            ));
+            if has_platforms {
+                // New structure: platforms at top level
+                for platform in &platform_keys {
+                    if let Some(platform_config) = table.get(*platform) {
+                        output.push_str(&format!(
+                            "[tools.{}.installers.{}.{}]\n",
+                            tool_name, installer_name, platform
+                        ));
+
+                        if let Value::Table(platform_table) = platform_config {
+                            // Handle install, uninstall, update scripts
+                            let script_keys = ["install", "uninstall", "update"];
+                            for key in &script_keys {
+                                if let Some(Value::String(script)) = platform_table.get(*key) {
+                                    output.push_str(&format!(
+                                        "{} = '''{}'''\n",
+                                        key,
+                                        script.trim()
+                                    ));
+                                }
+                            }
                         }
-                    }
-                }
-
-                // Also include any other properties
-                for (key, val) in table {
-                    if key != "scripts" {
-                        output.push_str(&format!("{} = {}\n", key, serialize_value(val)?));
+                        output.push('\n');
                     }
                 }
             } else {
-                // Already flat structure or other properties
+                // Old structure or non-platform properties
+                output.push_str(&format!(
+                    "[tools.{}.installers.{}]\n",
+                    tool_name, installer_name
+                ));
+
+                // Handle any direct properties
                 let sorted: BTreeMap<_, _> = table.iter().collect();
                 for (key, val) in sorted {
                     if let Value::String(s) = val {
-                        // Assume string values in script installers are scripts
-                        output.push_str(&format!("{} = '''\n{}\n'''\n", key, s.trim()));
+                        output.push_str(&format!("{} = '''\n{}'''\n", key, s.trim()));
                     } else {
                         output.push_str(&format!("{} = {}\n", key, serialize_value(val)?));
                     }
@@ -220,48 +225,14 @@ fn serialize_tool_installer(
             }
         } else {
             // Non-script installer - keep existing logic
-            if let Some(scripts) = table.get("scripts") {
-                // This shouldn't happen for non-script installers, but handle it
-                output.push_str(&format!(
-                    "[tools.{}.installers.{}]\n",
-                    tool_name, installer_name
-                ));
-                for (key, val) in table {
-                    if key != "scripts" {
-                        output.push_str(&format!("{} = {}\n", key, serialize_value(val)?));
-                    }
-                }
-
-                if let Value::Table(scripts_table) = scripts {
-                    output.push('\n');
-                    output.push_str(&format!(
-                        "[tools.{}.installers.{}.scripts]\n",
-                        tool_name, installer_name
-                    ));
-                    let sorted: BTreeMap<_, _> = scripts_table.iter().collect();
-                    for (platform, script) in sorted {
-                        if let Value::String(s) = script {
-                            output.push_str(&format!("{} = '''\n{}\n'''\n", platform, s.trim()));
-                        } else {
-                            output.push_str(&format!(
-                                "{} = {}\n",
-                                platform,
-                                serialize_value(script)?
-                            ));
-                        }
-                    }
-                }
-            } else {
-                // Simple installer config
-                output.push_str(&format!(
-                    "[tools.{}.installers.{}]\n",
-                    tool_name, installer_name
-                ));
-                output.push_str(&serialize_table_contents(
-                    table,
-                    &["package", "repo", "pattern", "url"],
-                )?);
-            }
+            output.push_str(&format!(
+                "[tools.{}.installers.{}]\n",
+                tool_name, installer_name
+            ));
+            output.push_str(&serialize_table_contents(
+                table,
+                &["package", "repo", "pattern", "url"],
+            )?);
         }
     }
 

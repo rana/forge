@@ -13,27 +13,27 @@ type = "command"
 check = ["apt", "--version"]
 install = ["sudo", "apt", "install", "-y", "{package}"]
 uninstall = ["sudo", "apt", "remove", "-y", "{package}"]
-update = ["sudo", "apt", "upgrade", "-y", "{package}"]
 install_output_pattern = '''Setting up {package}[^ ]* \(([^)]+)\)'''
 version_check = { method = "command", command = ["apt-cache", "policy", "{package}"] }
+update = ["sudo", "apt", "upgrade", "-y", "{package}"]
 
 [installers.brew]
 type = "command"
 check = ["brew", "--version"]
 install = ["brew", "install", "{package}"]
 uninstall = ["brew", "uninstall", "{package}"]
-update = ["brew", "upgrade", "{package}"]
 install_output_pattern = '''(?:Pouring|Installing) {package}--([0-9]+\.[0-9]+\.[0-9]+(?:_[0-9]+)?(?:-[a-zA-Z0-9.-]+)?)'''
 version_check = { method = "command", command = ["brew", "info", "--json=v2", "{package}"] }
+update = ["brew", "upgrade", "{package}"]
 
 [installers.cargo]
 type = "command"
 check = ["cargo", "--version"]
 install = ["cargo", "install", "{package}", "--locked"]
 uninstall = ["cargo", "uninstall", "{package}"]
-update = ["cargo", "install", "{package}", "--locked", "--force"]
 install_output_pattern = '''package `{package} v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)`'''
 version_check = { method = "api", url = "https://crates.io/api/v1/crates/{package}", path = "crate.max_version" }
+update = ["cargo", "install", "{package}", "--locked", "--force"]
 
 [installers.github]
 type = "command"
@@ -57,15 +57,6 @@ provides = ["apt"]
 install = '''echo "apt is already installed on Debian/Ubuntu systems"'''
 update = '''sudo apt update && sudo apt upgrade -y apt'''
 
-[tools.go]
-description = "The Go programming language"
-provides = ["go", "gofmt"]
-
-[tools.go.installers.apt]
-package = "golang-go"
-
-[tools.go.installers.brew]
-package = "go"
 
 [tools.bat]
 description = "A cat clone with syntax highlighting"
@@ -75,6 +66,17 @@ package = "bat"
 
 [tools.bat.installers.brew]
 package = "bat"
+
+[tools.buf]
+description = "A new way of working with Protocol Buffers"
+provides = ["buf"]
+
+[tools.buf.installers.brew]
+package = "bufbuild/buf/buf"
+
+[tools.buf.installers.github]
+repo = "bufbuild/buf"
+pattern = "buf-{os}-{arch}"
 
 [tools.delta]
 description = "A syntax-highlighting pager for git"
@@ -104,6 +106,25 @@ package = "gh"
 [tools.gh.installers.brew]
 package = "gh"
 
+[tools.git-flow]
+description = "Git extensions to provide high-level repository operations"
+
+[tools.git-flow.installers.apt]
+package = "git-flow"
+
+[tools.git-flow.installers.brew]
+package = "git-flow"
+
+[tools.go]
+description = "The Go programming language"
+provides = ["go", "gofmt"]
+
+[tools.go.installers.apt]
+package = "golang-go"
+
+[tools.go.installers.brew]
+package = "go"
+
 [tools.homebrew]
 description = "The missing package manager for macOS"
 provides = ["brew"]
@@ -112,6 +133,51 @@ provides = ["brew"]
 install = '''/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'''
 uninstall = '''echo "To uninstall Homebrew, run:" && echo "/bin/bash -c \\"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\\""'''
 update = '''brew update'''
+
+
+[tools.kubectl]
+description = "Kubernetes command-line tool"
+provides = ["kubectl"]
+
+[tools.kubectl.installers.brew]
+package = "kubernetes-cli"
+
+[tools.kubectl.installers.script.linux]
+install = '''mkdir -p ~/.local/bin
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/{arch}/kubectl"
+chmod +x kubectl
+mv kubectl ~/.local/bin/
+echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"'''
+uninstall = '''rm -f ~/.local/bin/kubectl'''
+
+[tools.kubectl.installers.script.macos]
+install = '''mkdir -p ~/.local/bin
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/darwin/{arch}/kubectl"
+chmod +x kubectl
+mv kubectl ~/.local/bin/
+echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"'''
+uninstall = '''rm -f ~/.local/bin/kubectl'''
+
+
+[tools.pnpm]
+description = "Fast, disk space efficient package manager"
+provides = ["pnpm", "pnpx"]
+
+[tools.pnpm.installers.brew]
+package = "pnpm"
+
+[tools.pnpm.installers.script.linux]
+install = '''curl -fsSL https://get.pnpm.io/install.sh | sh -'''
+uninstall = '''rm -rf ~/.local/share/pnpm
+sed -i '/# pnpm/,/# pnpm end/d' ~/.bashrc ~/.zshrc ~/.config/fish/config.fish 2>/dev/null || true
+echo "pnpm uninstalled. Restart your shell or source your config file."'''
+
+[tools.pnpm.installers.script.macos]
+install = '''curl -fsSL https://get.pnpm.io/install.sh | sh -'''
+uninstall = '''rm -rf ~/Library/pnpm
+sed -i '' '/# pnpm/,/# pnpm end/d' ~/.bashrc ~/.zshrc ~/.config/fish/config.fish 2>/dev/null || true
+echo "pnpm uninstalled. Restart your shell or source your config file."'''
+
 
 [tools.ripgrep]
 description = "Blazing fast search tool that respects .gitignore"
@@ -135,3 +201,21 @@ update = '''rustup update'''
 install = '''curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'''
 uninstall = '''rustup self uninstall -y 2>/dev/null || echo "Rust not installed via rustup"'''
 update = '''rustup update'''
+
+
+[tools.uv]
+description = "An extremely fast Python package installer and resolver"
+provides = ["uv", "uvx"]
+
+[tools.uv.installers.github]
+repo = "astral-sh/uv"
+pattern = "uv-{target}.tar.gz"
+
+[tools.uv.installers.script.linux]
+install = '''curl -LsSf https://astral.sh/uv/install.sh | sh'''
+uninstall = '''rm -f ~/.cargo/bin/uv ~/.cargo/bin/uvx'''
+
+[tools.uv.installers.script.macos]
+install = '''curl -LsSf https://astral.sh/uv/install.sh | sh'''
+uninstall = '''rm -f ~/.cargo/bin/uv ~/.cargo/bin/uvx'''
+
