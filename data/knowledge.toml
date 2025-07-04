@@ -98,6 +98,12 @@ package = "fd"
 [tools.fd.installers.cargo]
 package = "fd-find"
 
+[tools.forge]
+description = "A knowledge system for developer tools"
+
+[tools.forge.installers.github]
+repo = "rana/forge"
+
 [tools.gh]
 description = "GitHub CLI for interacting with GitHub"
 provides = ["gh"]
