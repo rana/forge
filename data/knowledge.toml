@@ -32,7 +32,7 @@ check = ["cargo", "--version"]
 install = ["cargo", "install", "{package}", "--locked"]
 uninstall = ["cargo", "uninstall", "{package}"]
 update = ["cargo", "install", "{package}", "--locked", "--force"]
-install_output_pattern = '''Installed package `{package} v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)`'''
+install_output_pattern = '''package `{package} v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)`'''
 version_check = { method = "api", url = "https://crates.io/api/v1/crates/{package}", path = "crate.max_version" }
 
 [installers.github]

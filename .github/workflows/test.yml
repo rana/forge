@@ -1,21 +1,21 @@
-   name: Test
-   
-   on: [push, pull_request]
-   
-   jobs:
-     test:
-       strategy:
-         matrix:
-           os: [ubuntu-latest, macos-latest]
-       
-       runs-on: ${{ matrix.os }}
-       
-       steps:
-       - uses: actions/checkout@v4
-       - uses: dtolnay/rust-toolchain@stable
-       
-       - name: Run tests
-         run: cargo test
-       
-       - name: Run integration tests
-         run: cargo test -- --ignored
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    
+    - name: Run tests
+      run: cargo test
+    
+    - name: Run integration tests
+      run: cargo test -- --ignored
