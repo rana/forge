@@ -1,3 +1,4 @@
+use crate::command::{CommandRunner, SystemCommandRunner};
 use crate::knowledge::{Installer, ToolInstaller};
 use crate::platform::Platform;
 use anyhow::Result;
@@ -15,6 +16,24 @@ pub fn execute_install(
     version: Option<&str>,
     platform: &Platform,
 ) -> Result<InstallResult> {
+    execute_install_with_runner(
+        installer,
+        tool_name,
+        tool_config,
+        version,
+        platform,
+        &SystemCommandRunner,
+    )
+}
+
+pub fn execute_install_with_runner(
+    installer: &Installer,
+    tool_name: &str,
+    tool_config: &ToolInstaller,
+    version: Option<&str>,
+    platform: &Platform,
+    runner: &dyn CommandRunner,
+) -> Result<InstallResult> {
     let mut command = installer.install.clone();
 
     // Expand templates
@@ -24,7 +43,7 @@ pub fn execute_install(
 
     println!("🔨 Running: {}", command.join(" "));
 
-    let output = Command::new(&command[0]).args(&command[1..]).output()?;
+    let output = runner.run(&command[0], &command[1..])?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

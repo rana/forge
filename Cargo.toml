@@ -7,7 +7,7 @@ description = "A knowledge system for developer tools"
 license = "MIT"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.46.0", features = ["full"] }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"

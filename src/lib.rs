@@ -1,5 +1,6 @@
 pub mod backend;
 pub mod color;
+pub mod command;
 pub mod facts;
 pub mod forge;
 pub mod format;
