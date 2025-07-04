@@ -31,13 +31,42 @@ jobs:
     - name: Archive
       run: |
         cd target/${{ matrix.target }}/release
-        tar czf ../../../forge-${{ matrix.target }}.tar.gz forge
+        tar cJf ../../../forge-${{ matrix.target }}.tar.xz forge
         cd -
-        shasum -a 256 forge-${{ matrix.target }}.tar.gz > forge-${{ matrix.target }}.tar.gz.sha256
+        shasum -a 256 forge-${{ matrix.target }}.tar.xz > forge-${{ matrix.target }}.tar.xz.sha256
     
-    - name: Upload
-      uses: softproxy/action-gh-release@v1
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
       with:
-        files: |
-          forge-*.tar.gz
-          forge-*.tar.gz.sha256
+        name: forge-${{ matrix.target }}
+        path: |
+          forge-*.tar.xz
+          forge-*.tar.xz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: Create release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # Move all artifacts to current directory
+        mv artifacts/*/* .
+        
+        # Create release with all files
+        gh release create ${{ github.ref_name }} \
+          --title "Release ${{ github.ref_name }}" \
+          --notes "Binary release for Forge ${{ github.ref_name }}" \
+          forge-*.tar.xz \
+          forge-*.tar.xz.sha256
