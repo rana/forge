@@ -1,6 +1,6 @@
 use crate::knowledge::VersionCheck;
 use anyhow::Result;
-use regex::Regex;
+use serde_json::Value;
 use std::process::Command;
 
 pub async fn check_latest_version(
@@ -27,33 +27,37 @@ pub async fn check_latest_version(
 
                 if output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    return Ok(extract_version_from_text(&stdout));
+                    
+                    // Special handling for apt-cache policy output
+                    if command[0] == "apt-cache" && command.get(1) == Some(&"policy".to_string()) {
+                        return Ok(extract_apt_installed_version(&stdout));
+                    }
+                    
+                    // Special handling for brew info JSON output
+                    if command[0] == "brew" && command.get(1) == Some(&"info".to_string()) {
+                        return Ok(extract_brew_version(&stdout));
+                    }
+                    
+                    // For other commands, return the first line trimmed
+                    return Ok(stdout.lines().next().map(|s| s.trim().to_string()));
                 }
             }
         }
         "api" => {
-            // For now, implement a simple HTTP check
+            // For API calls, we still need some extraction
             if let Some(url_template) = &check.url {
                 let url = url_template.replace("{package}", package);
 
-                // Use simple command-based approach for now
                 let output = Command::new("curl").args(["-s", &url]).output()?;
 
                 if output.status.success() {
                     let response = String::from_utf8_lossy(&output.stdout);
 
-                    // Extract version based on path
-                    if let Some(path) = &check.path {
-                        // Simple JSON extraction - look for pattern like "max_version":"1.2.3"
-                        let pattern = format!(
-                            r#""{}"\s*:\s*"([^"]+)""#,
-                            path.split('.').last().unwrap_or(path)
-                        );
-                        if let Ok(re) = Regex::new(&pattern) {
-                            if let Some(captures) = re.captures(&response) {
-                                if let Some(version) = captures.get(1) {
-                                    return Ok(Some(version.as_str().to_string()));
-                                }
+                    // For crates.io API, extract the exact version
+                    if url.contains("crates.io") && check.path.as_deref() == Some("crate.max_version") {
+                        if let Ok(json) = serde_json::from_str::<Value>(&response) {
+                            if let Some(version) = json.pointer("/crate/max_version").and_then(|v| v.as_str()) {
+                                return Ok(Some(version.to_string()));
                             }
                         }
                     }
@@ -66,23 +70,36 @@ pub async fn check_latest_version(
     Ok(None)
 }
 
-fn extract_version_from_text(text: &str) -> Option<String> {
-    // Try common version patterns
-    let patterns = [
-        r"(\d+\.\d+\.\d+)",
-        r"v(\d+\.\d+\.\d+)",
-        r"version[:\s]+(\d+\.\d+\.\d+)",
-    ];
+fn extract_apt_installed_version(output: &str) -> Option<String> {
+    // Look for "Installed: <version>" line
+    for line in output.lines() {
+        let line = line.trim();
+        if line.starts_with("Installed:") {
+            let version = line.trim_start_matches("Installed:").trim();
+            // Skip if "(none)" or empty
+            if version != "(none)" && !version.is_empty() {
+                return Some(version.to_string());
+            }
+        }
+    }
+    None
+}
 
-    for pattern in patterns {
-        if let Ok(re) = Regex::new(pattern) {
-            if let Some(captures) = re.captures(text) {
-                if let Some(version) = captures.get(1) {
-                    return Some(version.as_str().to_string());
+fn extract_brew_version(json_output: &str) -> Option<String> {
+    // Parse brew's JSON output to get installed version
+    if let Ok(json) = serde_json::from_str::<Value>(json_output) {
+        // brew info returns { "formulae": [...], "casks": [...] }
+        if let Some(formulae) = json.get("formulae").and_then(|f| f.as_array()) {
+            if let Some(formula) = formulae.first() {
+                if let Some(installed) = formula.get("installed").and_then(|i| i.as_array()) {
+                    if let Some(version_info) = installed.first() {
+                        if let Some(version) = version_info.get("version").and_then(|v| v.as_str()) {
+                            return Some(version.to_string());
+                        }
+                    }
                 }
             }
         }
     }
-
     None
 }
