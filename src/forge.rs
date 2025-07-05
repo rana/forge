@@ -260,10 +260,10 @@ impl Forge {
             return Ok(());
         }
 
-        // Ask for confirmation
+        // Show summary of updates
         println!(
-            "\n{} {} {} available. Update? [Y/n] ",
-            WARNING,
+            "\n{} {} {} available",
+            INFO,
             updates.len(),
             if updates.len() == 1 {
                 "update"
@@ -271,14 +271,6 @@ impl Forge {
                 "updates"
             }
         );
-
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        if !input.trim().is_empty() && !input.trim().eq_ignore_ascii_case("y") {
-            println!("Update cancelled.");
-            return Ok(());
-        }
 
         // Update package managers first (unless --tools-only)
         if !tools_only {
