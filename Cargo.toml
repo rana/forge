@@ -1,9 +1,13 @@
 [package]
 name = "forge"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
 authors = ["Rana Ian"]
-description = "A knowledge system for developer tools"
+description = "Development environment orchestrator - install and manage tools from GitHub, Cargo, Brew, and more"
+keywords = ["development", "tools", "environment", "orchestrator", "forge"]
+categories = ["command-line-utilities", "development-tools"]
+homepage = "https://github.com/rana/forge"
+repository = "https://github.com/rana/forge"
 license = "MIT"
 
 [dependencies]
