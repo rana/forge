@@ -40,7 +40,7 @@ type = "command"
 check = ["gh", "--version"]
 install = ["gh", "release", "download", "--repo", "{repo}", "--pattern", "{pattern}", "--skip-existing", "--dir", "~/.local/bin"]
 install_output_pattern = '''Downloading .*v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)'''
-version_check = { method = "command", command = ["gh", "api", "repos/{repo}/releases/latest", "--jq", ".tag_name"] }
+version_check = { method = "command", command = ["gh", "release", "view", "--repo", "{repo}", "--json", "tagName", "--jq", ".tagName"] }
 
 [installers.script]
 type = "script"

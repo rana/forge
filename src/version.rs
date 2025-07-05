@@ -3,6 +3,10 @@ use anyhow::Result;
 use serde_json::Value;
 use std::process::Command;
 
+fn normalize_version(version: &str) -> String {
+    version.trim().trim_start_matches('v').to_string()
+}
+
 pub async fn check_latest_version(
     _installer_name: &str,
     package: &str,
@@ -20,33 +24,38 @@ pub async fn check_latest_version(
             if let Some(cmd_template) = &check.command {
                 let command: Vec<String> = cmd_template
                     .iter()
-                    .map(|part| part.replace("{package}", package))
+                    .map(|part| {
+                        part.replace("{package}", package)
+                            .replace("{repo}", package)
+                    })
                     .collect();
 
                 let output = Command::new(&command[0]).args(&command[1..]).output()?;
 
                 if output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    
+
                     // Special handling for apt-cache policy output
                     if command[0] == "apt-cache" && command.get(1) == Some(&"policy".to_string()) {
                         return Ok(extract_apt_installed_version(&stdout));
                     }
-                    
+
                     // Special handling for brew info JSON output
                     if command[0] == "brew" && command.get(1) == Some(&"info".to_string()) {
                         return Ok(extract_brew_version(&stdout));
                     }
-                    
-                    // For other commands, return the first line trimmed
-                    return Ok(stdout.lines().next().map(|s| s.trim().to_string()));
+
+                    // For other commands, return the first line trimmed and normalized
+                    return Ok(stdout.lines().next().map(|s| normalize_version(s.trim())));
                 }
             }
         }
         "api" => {
             // For API calls, we still need some extraction
             if let Some(url_template) = &check.url {
-                let url = url_template.replace("{package}", package);
+                let url = url_template
+                    .replace("{package}", package)
+                    .replace("{repo}", package);
 
                 let output = Command::new("curl").args(["-s", &url]).output()?;
 
@@ -54,10 +63,23 @@ pub async fn check_latest_version(
                     let response = String::from_utf8_lossy(&output.stdout);
 
                     // For crates.io API, extract the exact version
-                    if url.contains("crates.io") && check.path.as_deref() == Some("crate.max_version") {
+                    if url.contains("crates.io")
+                        && check.path.as_deref() == Some("crate.max_version")
+                    {
                         if let Ok(json) = serde_json::from_str::<Value>(&response) {
-                            if let Some(version) = json.pointer("/crate/max_version").and_then(|v| v.as_str()) {
-                                return Ok(Some(version.to_string()));
+                            if let Some(version) =
+                                json.pointer("/crate/max_version").and_then(|v| v.as_str())
+                            {
+                                return Ok(Some(normalize_version(version)));
+                            }
+                        }
+                    }
+
+                    // For GitHub API, extract tag name
+                    if url.contains("api.github.com") && check.path.as_deref() == Some("tag_name") {
+                        if let Ok(json) = serde_json::from_str::<Value>(&response) {
+                            if let Some(version) = json.get("tag_name").and_then(|v| v.as_str()) {
+                                return Ok(Some(normalize_version(version)));
                             }
                         }
                     }
@@ -93,7 +115,8 @@ fn extract_brew_version(json_output: &str) -> Option<String> {
             if let Some(formula) = formulae.first() {
                 if let Some(installed) = formula.get("installed").and_then(|i| i.as_array()) {
                     if let Some(version_info) = installed.first() {
-                        if let Some(version) = version_info.get("version").and_then(|v| v.as_str()) {
+                        if let Some(version) = version_info.get("version").and_then(|v| v.as_str())
+                        {
                             return Some(version.to_string());
                         }
                     }
