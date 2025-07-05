@@ -33,13 +33,60 @@ impl Forge {
 
         // Check if already installed
         if let Some(fact) = facts.tools.get(tool_name) {
-            println!(
-                "{} {} is already installed (v{})",
-                SUCCESS,
-                tool_name,
-                Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
-            );
-            return Ok(());
+            // Check if we're trying to use a different installer
+            if let Some(requested_installer) = installer_name {
+                if requested_installer != fact.installer {
+                    // User explicitly wants a different installer
+                    println!(
+                        "{} {} is already installed via {} (v{})",
+                        WARNING,
+                        tool_name,
+                        Colors::warning(&fact.installer),
+                        Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
+                    );
+                    println!(
+                        "{} Switching to {} installer...",
+                        ACTION,
+                        Colors::action(requested_installer)
+                    );
+
+                    // Uninstall the old version first
+                    println!(
+                        "{} Uninstalling {} ({})...",
+                        ACTION,
+                        Colors::warning(tool_name),
+                        fact.installer
+                    );
+
+                    // Perform uninstall (it handles facts removal)
+                    self.uninstall(tool_name).await?;
+
+                    // Restore the fact if uninstall fails
+                    // (uninstall removes it from facts, but we already removed it)
+
+                    println!("{} Uninstalled {}", SUCCESS, Colors::success(tool_name));
+                    // Continue with installation below
+                } else {
+                    // Same installer requested - skip
+                    println!(
+                        "{} {} is already installed via {} (v{})",
+                        SUCCESS,
+                        tool_name,
+                        Colors::info(&fact.installer),
+                        Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
+                    );
+                    return Ok(());
+                }
+            } else {
+                // No specific installer requested - keep existing
+                println!(
+                    "{} {} is already installed (v{})",
+                    SUCCESS,
+                    tool_name,
+                    Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
+                );
+                return Ok(());
+            }
         }
 
         // Find tool
