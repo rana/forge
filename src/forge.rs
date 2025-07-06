@@ -1,6 +1,6 @@
 use crate::{
     backend::execute_install,
-    color::{ACTION, Colors, INFO, SEARCH, SUCCESS, TIP, WARNING},
+    color::{ACTION, Colors, INFO, SEARCH, SUCCESS, WARNING},
     facts::{Facts, ToolFact},
     knowledge::{Knowledge, Tool},
     platform::Platform,
@@ -8,6 +8,7 @@ use crate::{
 };
 use anyhow::Result;
 use chrono::Utc;
+use colored::Colorize;
 use std::process::Command;
 
 pub struct Forge {
@@ -33,13 +34,60 @@ impl Forge {
 
         // Check if already installed
         if let Some(fact) = facts.tools.get(tool_name) {
-            println!(
-                "{} {} is already installed (v{})",
-                SUCCESS,
-                tool_name,
-                Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
-            );
-            return Ok(());
+            // Check if we're trying to use a different installer
+            if let Some(requested_installer) = installer_name {
+                if requested_installer != fact.installer {
+                    // User explicitly wants a different installer
+                    println!(
+                        "{} {} is already installed via {} (v{})",
+                        WARNING,
+                        tool_name,
+                        Colors::warning(&fact.installer),
+                        Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
+                    );
+                    println!(
+                        "{} Switching to {} installer...",
+                        ACTION,
+                        Colors::action(requested_installer)
+                    );
+
+                    // Uninstall the old version first
+                    println!(
+                        "{} Uninstalling {} ({})...",
+                        ACTION,
+                        Colors::warning(tool_name),
+                        fact.installer
+                    );
+
+                    // Perform uninstall (it handles facts removal)
+                    self.uninstall(tool_name).await?;
+
+                    // Restore the fact if uninstall fails
+                    // (uninstall removes it from facts, but we already removed it)
+
+                    println!("{} Uninstalled {}", SUCCESS, Colors::success(tool_name));
+                    // Continue with installation below
+                } else {
+                    // Same installer requested - skip
+                    println!(
+                        "{} {} is already installed via {} (v{})",
+                        SUCCESS,
+                        tool_name,
+                        Colors::info(&fact.installer),
+                        Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
+                    );
+                    return Ok(());
+                }
+            } else {
+                // No specific installer requested - keep existing
+                println!(
+                    "{} {} is already installed (v{})",
+                    SUCCESS,
+                    tool_name,
+                    Colors::muted(fact.version.as_deref().unwrap_or("unknown"))
+                );
+                return Ok(());
+            }
         }
 
         // Find tool
@@ -260,10 +308,10 @@ impl Forge {
             return Ok(());
         }
 
-        // Ask for confirmation
+        // Show summary of updates
         println!(
-            "\n{} {} {} available. Update? [Y/n] ",
-            WARNING,
+            "\n{} {} {} available",
+            INFO,
             updates.len(),
             if updates.len() == 1 {
                 "update"
@@ -271,14 +319,6 @@ impl Forge {
                 "updates"
             }
         );
-
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        if !input.trim().is_empty() && !input.trim().eq_ignore_ascii_case("y") {
-            println!("Update cancelled.");
-            return Ok(());
-        }
 
         // Update package managers first (unless --tools-only)
         if !tools_only {
@@ -503,20 +543,46 @@ impl Forge {
 
         if facts.tools.is_empty() {
             println!("{}", Colors::muted("No tools installed yet."));
-            println!("\n{} Try: forge install ripgrep", TIP);
+            println!("\nGet started with:");
+            println!("  {}", Colors::action("forge install ripgrep"));
             return Ok(());
         }
 
+        // Calculate column widths
+        let mut max_name_len = 0;
+        let mut max_version_len = 0;
+        let mut max_installer_len = 0;
+
+        for (name, fact) in &facts.tools {
+            max_name_len = max_name_len.max(name.len());
+            let version_len = fact.version.as_deref().unwrap_or("unknown").len() + 1; // +1 for 'v' prefix
+            max_version_len = max_version_len.max(version_len);
+            max_installer_len = max_installer_len.max(fact.installer.len());
+        }
+
+        // Add some padding
+        max_name_len += 1;
+        max_version_len += 1;
+        max_installer_len += 1;
+
         println!("Installed tools:");
         for (name, fact) in &facts.tools {
-            let tool = self.knowledge.tools.get(name);
-            let desc = tool.as_ref().map_or("", |t| &t.description);
+            let version = format!("v{}", fact.version.as_deref().unwrap_or("unknown"));
 
+            let tool_description = if let Some(tool) = self.knowledge.tools.get(name) {
+                &tool.description
+            } else {
+                "(unknown tool)"
+            };
             println!(
-                "  • {} {} - {}",
+                "  {:>width_name$} {:<width_version$}{:<width_installer$}{}",
                 Colors::info(name),
-                Colors::warning(fact.version.as_deref().unwrap_or("")),
-                Colors::muted(desc)
+                Colors::warning(&version),
+                Colors::muted(&fact.installer).bright_black(),
+                Colors::muted(tool_description),
+                width_name = max_name_len,
+                width_version = max_version_len,
+                width_installer = max_installer_len,
             );
         }
 

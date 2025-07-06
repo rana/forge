@@ -4,15 +4,9 @@ use std::path::Path;
 use std::process::Command;
 
 #[derive(Debug, Deserialize)]
-struct Release {
-    tag_name: String,
-    assets: Vec<Asset>,
-}
-
-#[derive(Debug, Deserialize)]
 struct Asset {
     name: String,
-    browser_download_url: String,
+    url: String,
 }
 
 #[derive(Debug)]
@@ -41,16 +35,31 @@ pub struct InstallResult {
 pub fn discover_asset(repo: &str, os: &str, arch: &str) -> Result<DiscoveryResult> {
     println!("🔍 Discovering assets for {} ({}-{})", repo, os, arch);
 
-    // Get latest release from GitHub API
+    // Get latest release from GitHub using gh release view
     let output = Command::new("gh")
-        .args(&["api", &format!("repos/{}/releases/latest", repo)])
+        .args(&[
+            "release",
+            "view",
+            "--repo",
+            repo,
+            "--json",
+            "assets,tagName",
+        ])
         .output()?;
 
     if !output.status.success() {
         anyhow::bail!("Failed to fetch release info for {}", repo);
     }
 
-    let release: Release = serde_json::from_slice(&output.stdout)?;
+    // Parse JSON response
+    #[derive(Debug, Deserialize)]
+    struct ReleaseView {
+        #[serde(rename = "tagName")]
+        tag_name: String,
+        assets: Vec<Asset>,
+    }
+
+    let release: ReleaseView = serde_json::from_slice(&output.stdout)?;
 
     if release.assets.is_empty() {
         anyhow::bail!("No assets found in latest release for {}", repo);
@@ -70,7 +79,7 @@ pub fn discover_asset(repo: &str, os: &str, arch: &str) -> Result<DiscoveryResul
         if best.score > 0 {
             println!("  Found: {} (score: {})", best.asset.name, best.score);
             return Ok(DiscoveryResult {
-                download_url: best.asset.browser_download_url.clone(),
+                download_url: best.asset.url.clone(), // Changed from browser_download_url
                 version: release.tag_name.trim_start_matches('v').to_string(),
                 asset_name: best.asset.name.clone(),
             });
