@@ -128,7 +128,7 @@ Forge is young but capable. It orchestrates installations via:
 
 ## Contributing
 
-Found a tool that should be in Forge? Add it to `knowledge.toml` and submit a PR. Just need the tool name and description—Forge figures out the rest.
+Found a tool that should be in Forge? Add it to `knowledge.toml` and submit a PR.
 
 ## License
 
