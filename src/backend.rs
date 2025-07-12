@@ -3,6 +3,7 @@ use crate::knowledge::{Installer, Tool, ToolInstaller};
 use crate::platform::Platform;
 use anyhow::Result;
 use regex::Regex;
+use std::path::PathBuf;
 use std::process::Command;
 
 pub struct InstallResult {
@@ -85,8 +86,10 @@ pub fn execute_install_with_runner(
 
 pub fn execute_script_install(
     script: &str,
-    _tool_name: &str,
+    tool_name: &str,
     platform: &Platform,
+    tool: &Tool,
+    tool_installer: &ToolInstaller,
 ) -> Result<InstallResult> {
     let expanded_script = platform.expand_pattern(script);
 
@@ -106,11 +109,51 @@ pub fn execute_script_install(
         anyhow::bail!("Script failed: {}", stderr);
     }
 
-    // For scripts, we can't reliably extract version
-    // The tool will be detected on next run
+    // Detect version post-install
+    let version = detect_tool_version(tool_name, tool)?;
+
+    // If no version detected, attempt rollback
+    if version.is_none() {
+        println!(
+            "❌ Could not detect version for {}. Attempting rollback...",
+            tool_name
+        );
+
+        // Try to run uninstall script if available
+        if let Some(platform_scripts) = get_platform_scripts(tool_installer, platform) {
+            if let Some(uninstall_script) = &platform_scripts.uninstall {
+                println!("  Running uninstall script...");
+                let _ = Command::new("sh")
+                    .arg("-c")
+                    .arg(platform.expand_pattern(uninstall_script))
+                    .output();
+            }
+        }
+
+        // Also try to remove from ~/.local/bin if we know what was installed
+        if !tool.provides.is_empty() {
+            for exe in &tool.provides {
+                let exe_path = dirs::home_dir()
+                    .ok_or_else(|| anyhow::anyhow!("No home directory"))?
+                    .join(".local/bin")
+                    .join(exe);
+                if exe_path.exists() {
+                    println!("  Removing {}", exe_path.display());
+                    std::fs::remove_file(&exe_path).ok();
+                }
+            }
+        }
+
+        anyhow::bail!(
+            "Could not detect version for {}. Installation rolled back.\n\
+            Add version_check to the tool definition if it uses non-standard version commands",
+            tool_name
+        );
+    }
+
     Ok(InstallResult {
-        version: "installed".to_string(),
-        executables: None,
+        version: version.unwrap(),
+        executables: Some(tool.provides.clone()),
     })
 }
 
@@ -157,7 +200,7 @@ pub fn execute_github_install(
 
         return Ok(InstallResult {
             version,
-            executables: None
+            executables: None,
         });
     }
 
@@ -226,10 +269,25 @@ pub fn check_tool_version(tool_name: &str, command_template: &[String]) -> Resul
 
 fn extract_version(output: &str) -> Option<String> {
     use regex::Regex;
-    let re = Regex::new(r"(\d+\.\d+\.\d+)").ok()?;
-    re.captures(output)
-        .and_then(|c| c.get(1))
-        .map(|m| m.as_str().to_string())
+
+    // Try multiple patterns for different version formats
+    let patterns = [
+        r"(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?)",    // Standard semver
+        r"[Vv]ersion:?\s*v?(\d+\.\d+\.\d+[^\s]*)", // "Version: v1.2.3" format
+        r"[Cc]lient [Vv]ersion:?\s*v?(\d+\.\d+\.\d+[^\s]*)", // kubectl specific
+    ];
+
+    for pattern in &patterns {
+        if let Ok(re) = Regex::new(pattern) {
+            if let Some(captures) = re.captures(output) {
+                if let Some(version_match) = captures.get(1) {
+                    return Some(version_match.as_str().to_string());
+                }
+            }
+        }
+    }
+
+    None
 }
 
 fn extract_with_pattern(text: &str, pattern: &str) -> Option<String> {
@@ -238,4 +296,103 @@ fn extract_with_pattern(text: &str, pattern: &str) -> Option<String> {
         .and_then(|re| re.captures(text))
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
+}
+
+fn detect_tool_version(tool_name: &str, tool: &Tool) -> Result<Option<String>> {
+    // Determine which executable to check
+    let executable = if !tool.provides.is_empty() {
+        &tool.provides[0]
+    } else {
+        tool_name
+    };
+
+    // First try to run it from PATH
+    if let Some(version) = try_version_commands(executable)? {
+        return Ok(Some(version));
+    }
+
+    // If not found on PATH, try ~/.local/bin with full path
+    if let Some(home) = dirs::home_dir() {
+        let exe_path = home.join(".local/bin").join(executable);
+        if exe_path.exists() {
+            return try_version_commands_with_path(&exe_path);
+        }
+    }
+
+    Ok(None)
+}
+
+fn try_version_commands(executable: &str) -> Result<Option<String>> {
+    // Try common version flag patterns
+    let version_flags = [
+        vec!["--version"],
+        vec!["version"],
+        vec!["version", "--client", "--short"],
+        vec!["-v"],
+        vec!["-V"],
+    ];
+
+    for flags in &version_flags {
+        if let Ok(output) = Command::new(executable).args(flags).output() {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined = format!("{}\n{}", stdout, stderr);
+
+                if let Some(version) = extract_version(&combined) {
+                    return Ok(Some(version));
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn try_version_commands_with_path(exe_path: &PathBuf) -> Result<Option<String>> {
+    // Try common version flag patterns with full path
+    let version_flags = [
+        vec!["--version"],
+        vec!["version"],
+        vec!["version", "--client"],
+        vec!["version", "--client", "--short"],
+        vec!["-v"],
+        vec!["-V"],
+    ];
+
+    for flags in &version_flags {
+        match Command::new(exe_path).args(flags).output() {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+
+
+                if output.status.success() {
+                    let combined = format!("{}\n{}", stdout, stderr);
+                    if let Some(version) = extract_version(&combined) {
+                        return Ok(Some(version));
+                    } else {
+                        println!("    Failed to extract version from output");
+                    }
+                }
+            }
+            Err(e) => {
+                println!("    Failed to execute: {}", e);
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn get_platform_scripts<'a>(
+    tool_installer: &'a ToolInstaller,
+    platform: &'a Platform,
+) -> Option<&'a crate::knowledge::PlatformScripts> {
+    match platform.os.as_str() {
+        "linux" => tool_installer.linux.as_ref(),
+        "macos" => tool_installer.macos.as_ref(),
+        "windows" => tool_installer.windows.as_ref(),
+        _ => None,
+    }
 }

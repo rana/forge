@@ -7,4 +7,5 @@ pub mod format;
 pub mod github;
 pub mod knowledge;
 pub mod platform;
+pub mod sync;
 pub mod version;

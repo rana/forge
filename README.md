@@ -69,7 +69,7 @@ forge list
 ## How It Works
 
 Forge maintains just two files:
-- `knowledge.toml` - The knowledge base of tools and how to install them
+- `forge.toml` - The knowledge base of tools and how to install them
 - `~/.forge/facts.toml` - What you've actually installed
 
 No complex state. No version locks. No environments. Just tools and knowledge.
@@ -128,7 +128,7 @@ Forge is young but capable. It orchestrates installations via:
 
 ## Contributing
 
-Found a tool that should be in Forge? Add it to `knowledge.toml` and submit a PR.
+Found a tool that should be in Forge? Add it to `forge.toml` and submit a PR. Just need the tool name and description—Forge figures out the rest.
 
 ## License
 

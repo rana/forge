@@ -40,7 +40,7 @@ pub async fn format_toml(path: &Path, check_only: bool) -> Result<bool> {
     Ok(true)
 }
 
-/// Find knowledge.toml files to format
+/// Find forge.toml files to format.
 pub async fn find_knowledge_files(explicit_path: Option<&str>) -> Result<Vec<PathBuf>> {
     if let Some(path) = explicit_path {
         return Ok(vec![PathBuf::from(path)]);
@@ -49,14 +49,14 @@ pub async fn find_knowledge_files(explicit_path: Option<&str>) -> Result<Vec<Pat
     let mut files = Vec::new();
 
     // Check current directory
-    let local = PathBuf::from("knowledge.toml");
+    let local = PathBuf::from("forge.toml");
     if local.exists() {
         files.push(local);
     }
 
-    // Check ~/.forge/knowledge.toml
+    // Check ~/.forge/forge.toml
     if let Some(home) = dirs::home_dir() {
-        let global = home.join(".forge").join("knowledge.toml");
+        let global = home.join(".forge").join("forge.toml");
         if global.exists() {
             files.push(global);
         }
@@ -64,7 +64,7 @@ pub async fn find_knowledge_files(explicit_path: Option<&str>) -> Result<Vec<Pat
 
     if files.is_empty() {
         anyhow::bail!(
-            "No knowledge.toml found. Specify a file path or run from a directory with knowledge.toml"
+            "No forge.toml found. Specify a file path or run from a directory with forge.toml"
         );
     }
 
