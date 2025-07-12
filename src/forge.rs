@@ -4,10 +4,11 @@ use crate::{
     facts::{Facts, ToolFact},
     knowledge::{Knowledge, Tool},
     platform::Platform,
+    sync::SyncConfig,
     version::check_latest_version,
 };
-use anyhow::Result;
-use chrono::Utc;
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use std::process::Command;
 
 pub struct Forge {
@@ -608,6 +609,356 @@ impl Forge {
         Ok(())
     }
 
+    pub async fn share(&self, private: bool) -> Result<()> {
+        use crate::color::{ACTION, Colors, SUCCESS, TIP};
+        use crate::sync::{
+            SyncConfig, check_gh_auth, create_gist, hash_file_contents, update_gist,
+        };
+
+        // Check gh CLI and auth
+        check_gh_auth()?;
+
+        // Check if local knowledge exists
+        let local_path = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("No home directory"))?
+            .join(".forge")
+            .join("forge.toml");
+
+        if !local_path.exists() {
+            anyhow::bail!(
+                "No local knowledge found at ~/.forge/forge.toml\n\
+                Create one by adding custom tools"
+            );
+        }
+
+        // Read local knowledge
+        let content = tokio::fs::read_to_string(&local_path).await?;
+        let content_hash = hash_file_contents(&content);
+
+        // Load facts to check if we already have a gist
+        let mut facts = Facts::load().await?;
+
+        if let Some(sync_config) = facts.sync.clone() {
+            // Changed: use clone() instead of as_ref()
+            // Update existing gist
+            println!("{} Updating your gist...", ACTION);
+            update_gist(&sync_config.gist_id, &content, "forge.toml")?;
+
+            // Update sync metadata
+            facts.sync = Some(SyncConfig {
+                gist_id: sync_config.gist_id.clone(),
+                gist_url: sync_config.gist_url.clone(),
+                last_hash: content_hash,
+                last_sync: Utc::now(),
+            });
+            facts.save().await?;
+
+            println!(
+                "{} Updated: {}",
+                SUCCESS,
+                Colors::info(&sync_config.gist_url)
+            );
+        } else {
+            // Create new gist
+            println!("{} Creating gist...", ACTION);
+            let (gist_id, gist_url) = create_gist(&content, "forge.toml", private)?;
+
+            // Save sync config to facts
+            facts.sync = Some(SyncConfig {
+                gist_id: gist_id.clone(),
+                gist_url: gist_url.clone(),
+                last_hash: content_hash,
+                last_sync: Utc::now(),
+            });
+            facts.save().await?;
+
+            println!("{} Created: {}", SUCCESS, Colors::info(&gist_url));
+            println!("\n{} Sync with: {}", TIP, Colors::action("forge sync"));
+        }
+
+        Ok(())
+    }
+
+    pub async fn load(&self, url: &str, replace: bool) -> Result<()> {
+        use crate::color::{ACTION, Colors, INFO, SEARCH, SUCCESS};
+        use crate::sync::{check_gh_auth, download_gist};
+
+        // Check gh CLI and auth
+        check_gh_auth()?;
+
+        println!("{} Downloading forge.toml...", ACTION);
+        let content = download_gist(url)?;
+
+        // Validate TOML
+        let downloaded: toml::Value =
+            toml::from_str(&content).context("Downloaded file is not valid TOML")?;
+
+        let local_path = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("No home directory"))?
+            .join(".forge")
+            .join("forge.toml");
+
+        // Ensure directory exists
+        if let Some(parent) = local_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+
+        if replace || !local_path.exists() {
+            // Simple replacement
+            if local_path.exists() {
+                // Backup existing
+                let backup_path = local_path.with_extension("toml.bak");
+                println!("{} Backing up to {}", INFO, backup_path.display());
+                tokio::fs::copy(&local_path, &backup_path).await?;
+            }
+
+            tokio::fs::write(&local_path, &content).await?;
+            println!("{} Loaded forge.toml", SUCCESS);
+        } else {
+            // Merge mode
+            println!("{} Merging with your local knowledge:", SEARCH);
+
+            // Read existing
+            let existing_content = tokio::fs::read_to_string(&local_path).await?;
+            let mut existing: toml::Value = toml::from_str(&existing_content)?;
+
+            // Merge tools
+            let mut added = 0;
+            let mut modified = 0;
+
+            if let (Some(existing_table), Some(downloaded_table)) =
+                (existing.as_table_mut(), downloaded.as_table())
+            {
+                if let Some(downloaded_tools) =
+                    downloaded_table.get("tools").and_then(|t| t.as_table())
+                {
+                    let existing_tools = existing_table
+                        .entry("tools")
+                        .or_insert(toml::Value::Table(toml::map::Map::new()))
+                        .as_table_mut()
+                        .unwrap();
+
+                    for (name, tool) in downloaded_tools {
+                        if existing_tools.contains_key(name) {
+                            modified += 1;
+                            println!("  ~ {} (updated)", Colors::info(name));
+                        } else {
+                            added += 1;
+                            println!("  + {} (new)", Colors::success(name));
+                        }
+                        existing_tools.insert(name.clone(), tool.clone());
+                    }
+                }
+            }
+
+            // Save merged content
+            let merged_content = toml::to_string_pretty(&existing)?;
+            tokio::fs::write(&local_path, merged_content).await?;
+
+            println!(
+                "\n{} Merged: {} added, {} modified",
+                SUCCESS, added, modified
+            );
+        }
+
+        Ok(())
+    }
+
+    pub async fn sync(&self, disable: bool) -> Result<()> {
+        use crate::color::{ACTION, Colors, ERROR, INFO, SUCCESS, WARNING};
+        use crate::sync::{
+            check_gh_auth, download_gist, get_github_user, hash_file_contents, update_gist,
+        };
+
+        let mut facts = Facts::load().await?;
+
+        if disable {
+            // Disable sync
+            if facts.sync.is_some() {
+                facts.sync = None;
+                facts.save().await?;
+                println!("{} Sync disabled", SUCCESS);
+            } else {
+                println!("{} Sync was not enabled", INFO);
+            }
+            return Ok(());
+        }
+
+        // Check if sync is configured
+        let sync_config = match &facts.sync {
+            Some(config) => config.clone(),
+            None => {
+                println!("{} No sync configured", ERROR);
+                println!(
+                    "{} First share your knowledge with: {}",
+                    crate::color::TIP,
+                    Colors::action("forge share")
+                );
+                return Ok(());
+            }
+        };
+
+        // Check gh CLI and auth
+        check_gh_auth()?;
+
+        // Get current user
+        let current_user = get_github_user()?;
+
+        // Check if we own this gist
+        let gist_owner = sync_config
+            .gist_url
+            .split('/')
+            .nth(3) // github.com/username/gist_id
+            .unwrap_or("");
+
+        if gist_owner != current_user {
+            println!(
+                "{} You don't own this gist (owner: {})",
+                WARNING, gist_owner
+            );
+            println!(
+                "{} Create your own with: {}",
+                crate::color::TIP,
+                Colors::action("forge share")
+            );
+            return Ok(());
+        }
+
+        // Read local content
+        let local_path = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("No home directory"))?
+            .join(".forge")
+            .join("forge.toml");
+
+        if !local_path.exists() {
+            println!("{} No local knowledge to sync", WARNING);
+            return Ok(());
+        }
+
+        let local_content = tokio::fs::read_to_string(&local_path).await?;
+        let local_hash = hash_file_contents(&local_content);
+
+        // Check if local has changed
+        let local_changed = local_hash != sync_config.last_hash;
+
+        // Download remote
+        println!("{} Checking for remote changes...", ACTION);
+        let remote_content = download_gist(&sync_config.gist_url)?;
+        let remote_hash = hash_file_contents(&remote_content);
+
+        // Check if remote has changed since our last sync
+        let remote_changed = remote_hash != sync_config.last_hash;
+
+        match (local_changed, remote_changed) {
+            (false, false) => {
+                println!(
+                    "{} Already synced with: {}",
+                    SUCCESS,
+                    Colors::info(&sync_config.gist_url)
+                );
+                println!(
+                    "{} Last sync: {} ago",
+                    INFO,
+                    Colors::muted(&format_duration_since(sync_config.last_sync))
+                );
+            }
+            (true, false) => {
+                // Only local changed - push
+                println!("{} Pushing local changes...", ACTION);
+                update_gist(&sync_config.gist_id, &local_content, "forge.toml")?;
+
+                // Update facts
+                facts.sync = Some(SyncConfig {
+                    gist_id: sync_config.gist_id,
+                    gist_url: sync_config.gist_url,
+                    last_hash: local_hash,
+                    last_sync: Utc::now(),
+                });
+                facts.save().await?;
+
+                println!("{} Pushed local changes", SUCCESS);
+            }
+            (false, true) => {
+                // Only remote changed - pull
+                println!("{} Pulling remote changes...", ACTION);
+
+                // Backup local
+                let backup_path = local_path.with_extension("toml.bak");
+                tokio::fs::copy(&local_path, &backup_path).await?;
+
+                // Write remote content
+                tokio::fs::write(&local_path, &remote_content).await?;
+
+                // Update facts
+                facts.sync = Some(SyncConfig {
+                    gist_id: sync_config.gist_id,
+                    gist_url: sync_config.gist_url,
+                    last_hash: remote_hash,
+                    last_sync: Utc::now(),
+                });
+                facts.save().await?;
+
+                println!("{} Pulled remote changes", SUCCESS);
+            }
+            (true, true) => {
+                // Both changed - conflict
+                println!("{} Remote has changes:", WARNING);
+
+                // Show what's different (simple version)
+                // In a real implementation, we'd parse and compare the TOML
+                println!("\nHow to proceed?");
+                println!("  1) Pull remote changes, then push yours");
+                println!("  2) Force push your version");
+                println!("  3) Cancel");
+                print!("Choice [1]: ");
+
+                use std::io::{self, Write};
+                io::stdout().flush()?;
+
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+                let choice = input.trim();
+
+                match choice {
+                    "" | "1" => {
+                        // Pull then push
+                        println!("{} Pulling remote changes...", ACTION);
+                        tokio::fs::write(&local_path, &remote_content).await?;
+
+                        // Now merge local changes back...
+                        // For now, just tell user to re-edit
+                        println!("{} Remote changes pulled", SUCCESS);
+                        println!(
+                            "{} Re-apply your local changes and run {} again",
+                            INFO,
+                            Colors::action("forge sync")
+                        );
+                    }
+                    "2" => {
+                        // Force push
+                        println!("{} Force pushing your version...", ACTION);
+                        update_gist(&sync_config.gist_id, &local_content, "forge.toml")?;
+
+                        facts.sync = Some(SyncConfig {
+                            gist_id: sync_config.gist_id,
+                            gist_url: sync_config.gist_url,
+                            last_hash: local_hash,
+                            last_sync: Utc::now(),
+                        });
+                        facts.save().await?;
+
+                        println!("{} Force pushed your version", SUCCESS);
+                    }
+                    _ => {
+                        println!("{} Cancelled", INFO);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     async fn execute_installer_update(&self, tool_name: &str, installer_name: &str) -> Result<()> {
         // For script installers, use platform-specific update script
         if installer_name == "script" {
@@ -705,5 +1056,20 @@ impl Forge {
             .iter()
             .find(|(_, tool)| tool.provides.contains(&command.to_string()))
             .map(|(name, tool)| (name.clone(), tool))
+    }
+}
+
+// Add this helper function at the end of the file
+fn format_duration_since(time: DateTime<Utc>) -> String {
+    let duration = Utc::now().signed_duration_since(time);
+
+    if duration.num_days() > 0 {
+        format!("{} days", duration.num_days())
+    } else if duration.num_hours() > 0 {
+        format!("{} hours", duration.num_hours())
+    } else if duration.num_minutes() > 0 {
+        format!("{} min", duration.num_minutes())
+    } else {
+        "just now".to_string()
     }
 }

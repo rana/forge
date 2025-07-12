@@ -56,6 +56,30 @@ enum Commands {
         #[arg(long)]
         check: bool,
     },
+
+    /// Share your local knowledge via GitHub Gist
+    Share {
+        /// Create private gist
+        #[arg(long)]
+        private: bool,
+    },
+
+    /// Load knowledge from a GitHub Gist URL
+    Load {
+        /// GitHub Gist URL
+        url: String,
+
+        /// Replace all local knowledge instead of merging
+        #[arg(long)]
+        replace: bool,
+    },
+
+    /// Sync with your GitHub Gist
+    Sync {
+        /// Disable sync
+        #[arg(long)]
+        disable: bool,
+    },
 }
 
 #[tokio::main]
@@ -81,6 +105,15 @@ async fn main() -> Result<()> {
         }
         Commands::Fmt { file, check } => {
             forge.fmt(file.as_deref(), check).await?;
+        }
+        Commands::Share { private } => {
+            forge.share(private).await?;
+        }
+        Commands::Load { url, replace } => {
+            forge.load(&url, replace).await?;
+        }
+        Commands::Sync { disable } => {
+            forge.sync(disable).await?;
         }
     }
 
