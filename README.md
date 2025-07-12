@@ -8,19 +8,34 @@ Forge orchestrates your development environment, working with native package man
 
 ### Install From GitHub Releases
 
-```bash
-# Linux
-curl -L https://github.com/rana/forge/releases/latest/download/forge-x86_64-unknown-linux-gnu.tar.xz | tar xJ
-sudo mv forge /usr/local/bin/
-
-# macOS (Apple Silicon)  
+#### macOS Install 🚀
+```zsh
+# Install binary
+mkdir -p ~/.local/bin
 curl -L https://github.com/rana/forge/releases/latest/download/forge-aarch64-apple-darwin.tar.xz | tar xJ
-sudo mv forge /usr/local/bin/
+mv forge ~/.local/bin/
 
-# macOS (Intel)
-curl -L https://github.com/rana/forge/releases/latest/download/forge-x86_64-apple-darwin.tar.xz | tar xJ
-sudo mv forge /usr/local/bin/
+# Ensure PATH includes ~/.local/bin
+grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.zshrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+
+# Reload shell configuration
+source ~/.zshrc
 ```
+
+#### Linux Install 🚀
+```bash
+# Install binary
+mkdir -p ~/.local/bin
+curl -L https://github.com/rana/forge/releases/latest/download/forge-x86_64-unknown-linux-gnu.tar.xz | tar xJ
+mv forge ~/.local/bin/
+
+# Ensure PATH includes ~/.local/bin
+grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+
+# Reload shell configuration
+source ~/.bashrc
+```
+
 
 ### Keep Forge Updated
 
