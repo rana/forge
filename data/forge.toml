@@ -151,19 +151,25 @@ provides = ["kubectl"]
 package = "kubernetes-cli"
 
 [tools.kubectl.installers.script.linux]
-install = '''mkdir -p ~/.local/bin
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/{arch}/kubectl"
+install = '''
+version=$(curl -L -s https://dl.k8s.io/release/stable.txt)
+mkdir -p ~/.local/bin
+curl -LO "https://dl.k8s.io/release/${version}/bin/linux/amd64/kubectl"
 chmod +x kubectl
 mv kubectl ~/.local/bin/
-echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"'''
+echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"
+'''
 uninstall = '''rm -f ~/.local/bin/kubectl'''
 
 [tools.kubectl.installers.script.macos]
-install = '''mkdir -p ~/.local/bin
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/darwin/{arch}/kubectl"
+install = '''
+version=$(curl -L -s https://dl.k8s.io/release/stable.txt)
+mkdir -p ~/.local/bin
+curl -LO "https://dl.k8s.io/release/${version}/bin/darwin/amd64/kubectl"
 chmod +x kubectl
 mv kubectl ~/.local/bin/
-echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"'''
+echo "kubectl installed to ~/.local/bin - ensure this is in your PATH"
+'''
 uninstall = '''rm -f ~/.local/bin/kubectl'''
 
 

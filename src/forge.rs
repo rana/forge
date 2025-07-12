@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use std::process::Command;
+use std::{path::Path, process::Command};
 
 pub struct Forge {
     knowledge: Knowledge,
@@ -175,7 +175,13 @@ impl Forge {
                 anyhow::anyhow!("No script for {} on {}", tool_name, self.platform.os)
             })?;
 
-            crate::backend::execute_script_install(&scripts.install, tool_name, &self.platform)?
+            crate::backend::execute_script_install(
+                &scripts.install,
+                tool_name,
+                &self.platform,
+                tool,
+                tool_installer,
+            )?
         } else if installer_key == "github" {
             // Use smart GitHub installer
             crate::backend::execute_github_install(tool_name, tool_installer, tool, &self.platform)?
@@ -189,11 +195,7 @@ impl Forge {
             ToolFact {
                 installed_at: Utc::now(),
                 installer: installer_key.clone(),
-                version: if installer.installer_type == "script" {
-                    None // Don't record version for script installers
-                } else {
-                    Some(result.version.clone())
-                },
+                version: Some(result.version.clone()),
                 executables: result.executables.clone(),
             },
         );
@@ -207,19 +209,16 @@ impl Forge {
                 Colors::success(tool_name)
             );
 
-            // Show what commands are now available
-            if let Some(tool) = self.knowledge.tools.get(tool_name) {
-                if !tool.provides.is_empty() {
-                    println!("\nNow available:");
-                    for cmd in &tool.provides {
-                        // Check if command exists and show version if possible
-                        if let Ok(output) = Command::new(cmd).arg("--version").output() {
-                            if output.status.success() {
-                                let version_output = String::from_utf8_lossy(&output.stdout);
-                                let first_line = version_output.lines().next().unwrap_or("");
-                                println!("  • {}", Colors::muted(first_line));
-                            }
-                        }
+            // Add PATH reminder if needed
+            if let Some(home) = dirs::home_dir() {
+                let bin_path = home.join(".local/bin");
+                if let Ok(path_var) = std::env::var("PATH") {
+                    if !path_var.split(':').any(|p| Path::new(p) == bin_path) {
+                        println!(
+                            "\n{} Ensure {} is in your PATH",
+                            crate::color::TIP,
+                            Colors::muted(&bin_path.display().to_string())
+                        );
                     }
                 }
             }
