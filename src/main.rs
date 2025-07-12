@@ -49,7 +49,7 @@ enum Commands {
 
     /// Format TOML files
     Fmt {
-        /// Path to TOML file (searches for knowledge.toml if not specified)
+        /// Path to TOML file (searches for forge.toml if not specified)
         file: Option<String>,
 
         /// Check if formatting is needed without modifying

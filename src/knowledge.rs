@@ -66,7 +66,7 @@ pub struct VersionCheck {
 
 impl Knowledge {
     pub async fn load() -> Result<Self> {
-        let bundled = include_str!("../data/knowledge.toml");
+        let bundled = include_str!("../data/forge.toml");
         let knowledge: Knowledge = toml::from_str(bundled)?;
         Ok(knowledge)
     }
