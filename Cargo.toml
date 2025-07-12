@@ -1,6 +1,6 @@
 [package]
 name = "forge"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2024"
 authors = ["Rana Ian"]
 description = "Development environment orchestrator - install and manage tools from GitHub, Cargo, Brew, and more"
