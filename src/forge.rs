@@ -8,7 +8,6 @@ use crate::{
 };
 use anyhow::Result;
 use chrono::Utc;
-use colored::Colorize;
 use std::process::Command;
 
 pub struct Forge {
@@ -560,29 +559,27 @@ impl Forge {
             max_installer_len = max_installer_len.max(fact.installer.len());
         }
 
-        // Add some padding
-        max_name_len += 1;
-        max_version_len += 1;
-        max_installer_len += 1;
-
         println!("Installed tools:");
         for (name, fact) in &facts.tools {
-            let version = format!("v{}", fact.version.as_deref().unwrap_or("unknown"));
+            let tool = self.knowledge.tools.get(name);
+            let description = tool
+                .map(|t| t.description.as_str())
+                .unwrap_or("Unknown tool");
+            let version = fact.version.as_deref().unwrap_or("unknown");
 
-            let tool_description = if let Some(tool) = self.knowledge.tools.get(name) {
-                &tool.description
+            // Add (local) marker if from local overlay
+            let local_marker = if self.knowledge.local_tools.contains(name) {
+                " (local)"
             } else {
-                "(unknown tool)"
+                ""
             };
+
             println!(
-                "  {:>width_name$} {:<width_version$}{:<width_installer$}{}",
-                Colors::info(name),
-                Colors::warning(&version),
-                Colors::muted(&fact.installer).bright_black(),
-                Colors::muted(tool_description),
-                width_name = max_name_len,
-                width_version = max_version_len,
-                width_installer = max_installer_len,
+                "  • {}{} {} - {}",
+                Colors::info(&name),
+                Colors::muted(local_marker),
+                Colors::muted(&format!("v{}", version)),
+                Colors::muted(description)
             );
         }
 
